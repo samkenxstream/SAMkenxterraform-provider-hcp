@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package provider
 
 import (
@@ -9,6 +12,7 @@ import (
 
 	sharedmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-shared/v1/models"
 	vaultmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-vault-service/stable/2020-11-25/models"
+
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 
@@ -22,11 +26,11 @@ var defaultVaultClusterTimeout = time.Minute * 5
 
 // createUpdateVaultClusterTimeout is the amount of time that can elapse
 // before a cluster create operation should timeout.
-var createUpdateVaultClusterTimeout = time.Minute * 35
+var createUpdateVaultClusterTimeout = time.Minute * 75
 
 // deleteVaultClusterTimeout is the amount of time that can elapse
 // before a cluster delete operation should timeout.
-var deleteVaultClusterTimeout = time.Minute * 25
+var deleteVaultClusterTimeout = time.Minute * 75
 
 func resourceVaultCluster() *schema.Resource {
 	return &schema.Resource{
@@ -62,7 +66,7 @@ func resourceVaultCluster() *schema.Resource {
 			},
 			// Optional fields
 			"tier": {
-				Description:      "Tier of the HCP Vault cluster. Valid options for tiers - `dev`, `starter_small`, `standard_small`, `standard_medium`, `standard_large`, `plus_small`, `plus_medium`, `plus_large`. See [pricing information](https://cloud.hashicorp.com/pricing/vault).",
+				Description:      "Tier of the HCP Vault cluster. Valid options for tiers - `dev`, `starter_small`, `standard_small`, `standard_medium`, `standard_large`, `plus_small`, `plus_medium`, `plus_large`. See [pricing information](https://www.hashicorp.com/products/vault/pricing). Changing a cluster's size or tier is only available to admins. See [Scale a cluster](https://registry.terraform.io/providers/hashicorp/hcp/latest/docs/guides/vault-scaling).",
 				Type:             schema.TypeString,
 				Optional:         true,
 				Computed:         true,
@@ -92,7 +96,7 @@ func resourceVaultCluster() *schema.Resource {
 				ForceNew:    true,
 			},
 			"paths_filter": {
-				Description: "The performance replication [paths filter](https://learn.hashicorp.com/tutorials/vault/paths-filter). Applies to performance replication secondaries only and operates in \"deny\" mode only.",
+				Description: "The performance replication [paths filter](https://developer.hashicorp.com/vault/tutorials/cloud-ops/vault-replication-terraform). Applies to performance replication secondaries only and operates in \"deny\" mode only.",
 				Type:        schema.TypeList,
 				MinItems:    1,
 				Elem: &schema.Schema{
@@ -127,7 +131,7 @@ func resourceVaultCluster() *schema.Resource {
 				Computed:    true,
 			},
 			"metrics_config": {
-				Description: "The metrics configuration for export. (https://learn.hashicorp.com/tutorials/cloud/vault-metrics-guide#metrics-streaming-configuration)",
+				Description: "The metrics configuration for export. (https://developer.hashicorp.com/vault/tutorials/cloud-monitoring/vault-metrics-guide#metrics-streaming-configuration)",
 				Type:        schema.TypeList,
 				MaxItems:    1,
 				Optional:    true,
@@ -175,7 +179,7 @@ func resourceVaultCluster() *schema.Resource {
 				},
 			},
 			"audit_log_config": {
-				Description: "The audit logs configuration for export. (https://learn.hashicorp.com/tutorials/cloud/vault-metrics-guide#metrics-streaming-configuration)",
+				Description: "The audit logs configuration for export. (https://developer.hashicorp.com/vault/tutorials/cloud-monitoring/vault-metrics-guide#metrics-streaming-configuration)",
 				Type:        schema.TypeList,
 				MaxItems:    1,
 				Optional:    true,
@@ -227,6 +231,44 @@ func resourceVaultCluster() *schema.Resource {
 				Type:        schema.TypeString,
 				Computed:    true,
 			},
+			"major_version_upgrade_config": {
+				Description: "The Major Version Upgrade configuration.",
+				Type:        schema.TypeList,
+				MaxItems:    1,
+				Optional:    true,
+				Computed:    true,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"upgrade_type": {
+							Description:      "The major upgrade type for the cluster. Valid options for upgrade type - `AUTOMATIC`, `SCHEDULED`, `MANUAL`",
+							Type:             schema.TypeString,
+							Required:         true,
+							ValidateDiagFunc: validateVaultUpgradeType,
+							DiffSuppressFunc: func(_, old, new string, _ *schema.ResourceData) bool {
+								return strings.EqualFold(old, new)
+							},
+						},
+						"maintenance_window_day": {
+							Description:      "The maintenance day of the week for scheduled upgrades. Valid options for maintenance window day - `MONDAY`, `TUESDAY`, `WEDNESDAY`, `THURSDAY`, `FRIDAY`, `SATURDAY`, `SUNDAY`",
+							Type:             schema.TypeString,
+							Optional:         true,
+							ValidateDiagFunc: validateVaultUpgradeWindowDay,
+							DiffSuppressFunc: func(_, old, new string, _ *schema.ResourceData) bool {
+								return strings.EqualFold(old, new)
+							},
+						},
+						"maintenance_window_time": {
+							Description:      "The maintenance time frame for scheduled upgrades. Valid options for maintenance window time - `WINDOW_12AM_4AM`, `WINDOW_6AM_10AM`, `WINDOW_12PM_4PM`, `WINDOW_6PM_10PM`",
+							Type:             schema.TypeString,
+							Optional:         true,
+							ValidateDiagFunc: validateVaultUpgradeWindowTime,
+							DiffSuppressFunc: func(_, old, new string, _ *schema.ResourceData) bool {
+								return strings.EqualFold(old, new)
+							},
+						},
+					},
+				},
+			},
 			"vault_public_endpoint_url": {
 				Description: "The public URL for the Vault cluster. This will be empty if `public_endpoint` is `false`.",
 				Type:        schema.TypeString,
@@ -267,7 +309,7 @@ func resourceVaultClusterCreate(ctx context.Context, d *schema.ResourceData, met
 		ProjectID:      client.Config.ProjectID,
 	}
 
-	//get metrics and audit config first so we can validate and fail faster
+	// Get metrics audit config and MVU config first so we can validate and fail faster.
 	metricsConfig, diagErr := getObservabilityConfig("metrics_config", d)
 	if diagErr != nil {
 		return diagErr
@@ -275,6 +317,10 @@ func resourceVaultClusterCreate(ctx context.Context, d *schema.ResourceData, met
 	auditConfig, diagErr := getObservabilityConfig("audit_log_config", d)
 	if diagErr != nil {
 		return diagErr
+	}
+	mvuConfig, error := getMajorVersionUpgradeConfig(d)
+	if diagErr != nil {
+		return error
 	}
 
 	// Use the hvn to get provider and region.
@@ -321,10 +367,11 @@ func resourceVaultClusterCreate(ctx context.Context, d *schema.ResourceData, met
 	if getPrimaryLinkIfAny(d) != "" {
 		primaryClusterLink := newLink(primaryClusterModel.Location, VaultClusterResourceType, primaryClusterModel.ID)
 		var pathsFilter *vaultmodels.HashicorpCloudVault20201125ClusterPerformanceReplicationPathsFilter
+		mode := vaultmodels.HashicorpCloudVault20201125ClusterPerformanceReplicationPathsFilterModeDENY
 		if paths, ok := d.GetOk("paths_filter"); ok {
 			pathStrings := getPathStrings(paths)
 			pathsFilter = &vaultmodels.HashicorpCloudVault20201125ClusterPerformanceReplicationPathsFilter{
-				Mode:  vaultmodels.HashicorpCloudVault20201125ClusterPerformanceReplicationPathsFilterModeDENY,
+				Mode:  &mode,
 				Paths: pathStrings,
 			}
 		}
@@ -350,12 +397,18 @@ func resourceVaultClusterCreate(ctx context.Context, d *schema.ResourceData, met
 			return diag.Errorf("only performance replication secondaries may specify a paths_filter")
 		}
 
+		var tier *vaultmodels.HashicorpCloudVault20201125Tier
+		t, ok := d.GetOk("tier")
+		if ok {
+			tier = vaultmodels.HashicorpCloudVault20201125Tier(strings.ToUpper(t.(string))).Pointer()
+		}
+
 		vaultCluster = &vaultmodels.HashicorpCloudVault20201125InputCluster{
 			Config: &vaultmodels.HashicorpCloudVault20201125InputClusterConfig{
 				VaultConfig: &vaultmodels.HashicorpCloudVault20201125VaultConfig{
 					InitialVersion: vaultVersion,
 				},
-				Tier: vaultmodels.HashicorpCloudVault20201125Tier(strings.ToUpper(d.Get("tier").(string))),
+				Tier: tier,
 				NetworkConfig: &vaultmodels.HashicorpCloudVault20201125InputNetworkConfig{
 					NetworkID:        hvn.ID,
 					PublicIpsEnabled: publicEndpoint,
@@ -399,6 +452,21 @@ func resourceVaultClusterCreate(ctx context.Context, d *schema.ResourceData, met
 		return diag.Errorf("unable to retrieve Vault cluster (%s): %v", payload.ClusterID, err)
 	}
 
+	// If we pass the major version upgrade configuration we need to update it after the creation of the cluster,
+	// since the cluster is created by default to automatic upgrade
+	if mvuConfig != nil {
+		_, err := clients.UpdateVaultMajorVersionUpgradeConfig(ctx, client, cluster.Location, payload.ClusterID, mvuConfig)
+		if err != nil {
+			return diag.Errorf("error updating Vault cluster major version upgrade config (%s): %v", payload.ClusterID, err)
+		}
+
+		// refresh the created Vault cluster.
+		cluster, err = clients.GetVaultClusterByID(ctx, client, loc, payload.ClusterID)
+		if err != nil {
+			return diag.Errorf("unable to retrieve Vault cluster (%s): %v", payload.ClusterID, err)
+		}
+	}
+
 	if err := setVaultClusterResourceData(d, cluster); err != nil {
 		return diag.FromErr(err)
 	}
@@ -431,7 +499,7 @@ func resourceVaultClusterRead(ctx context.Context, d *schema.ResourceData, meta 
 	}
 
 	// The Vault cluster was already deleted, remove from state.
-	if cluster.State == vaultmodels.HashicorpCloudVault20201125ClusterStateDELETED {
+	if *cluster.State == vaultmodels.HashicorpCloudVault20201125ClusterStateDELETED {
 		log.Printf("[WARN] Vault cluster (%s) failed to provision, removing from state", clusterID)
 		d.SetId("")
 		return nil
@@ -470,9 +538,16 @@ func resourceVaultClusterUpdate(ctx context.Context, d *schema.ResourceData, met
 	}
 
 	// Confirm at least one modifiable field has changed
-	if !d.HasChanges("tier", "public_endpoint", "paths_filter", "metrics_config", "audit_log_config") {
+	if !d.HasChanges("tier", "public_endpoint", "paths_filter", "metrics_config", "audit_log_config", "major_version_upgrade_config") {
 		return nil
 	}
+
+	// Get metrics audit config and mvu config first so we can validate and fail faster
+	mvuConfig, diagErr := getMajorVersionUpgradeConfig(d)
+	if diagErr != nil {
+		return diagErr
+	}
+
 	if d.HasChange("tier") || d.HasChange("metrics_config") || d.HasChange("audit_log_config") {
 		diagErr := updateVaultClusterConfig(ctx, client, d, cluster, clusterID)
 		if diagErr != nil {
@@ -502,8 +577,9 @@ func resourceVaultClusterUpdate(ctx context.Context, d *schema.ResourceData, met
 
 			// Invoke update paths filter endpoint.
 			pathStrings := getPathStrings(paths)
+			mode := vaultmodels.HashicorpCloudVault20201125ClusterPerformanceReplicationPathsFilterModeDENY
 			updateResp, err := clients.UpdateVaultPathsFilter(ctx, client, cluster.Location, clusterID, vaultmodels.HashicorpCloudVault20201125ClusterPerformanceReplicationPathsFilter{
-				Mode:  vaultmodels.HashicorpCloudVault20201125ClusterPerformanceReplicationPathsFilterModeDENY,
+				Mode:  &mode,
 				Paths: pathStrings,
 			})
 			if err != nil {
@@ -525,6 +601,13 @@ func resourceVaultClusterUpdate(ctx context.Context, d *schema.ResourceData, met
 			if err := clients.WaitForOperation(ctx, client, "delete Vault cluster paths filter", cluster.Location, deleteResp.Operation.ID); err != nil {
 				return diag.Errorf("unable to delete Vault cluster paths filter (%s): %v", clusterID, err)
 			}
+		}
+	}
+
+	if mvuConfig != nil {
+		_, err := clients.UpdateVaultMajorVersionUpgradeConfig(ctx, client, cluster.Location, clusterID, mvuConfig)
+		if err != nil {
+			return diag.Errorf("error updating Vault cluster major version upgrade config (%s): %v", clusterID, err)
 		}
 	}
 
@@ -584,7 +667,7 @@ func updateVaultClusterConfig(ctx context.Context, client *clients.Client, d *sc
 	isSecondary := false
 	destTier := getClusterTier(d)
 	if d.HasChange("tier") {
-		if inPlusTier(string(cluster.Config.Tier)) {
+		if inPlusTier(string(*cluster.Config.Tier)) {
 			// Plus tier clusters scale as a group via the primary cluster.
 			// However, it is still worth individually tracking the tier of each cluster so that the
 			// provider has the same information as the portal UI and can detect a scaling operation that
@@ -595,8 +678,8 @@ func updateVaultClusterConfig(ctx context.Context, client *clients.Client, d *sc
 			// It is important to keep the tier of all replicated clusters in sync.
 
 			// Because of (a), check that the scaling operation is necessary.
-			//if the cluster has the same tier but the metrics/audit_log changed, we want to update the cluster anyway to change the info
-			if cluster.Config.Tier == vaultmodels.HashicorpCloudVault20201125Tier(*destTier) && !d.HasChange("metrics_config") && !d.HasChange("audit_log_config") {
+			// If the cluster has the same tier but the metrics/audit_log changed, we want to update the cluster anyway to change the info.
+			if *cluster.Config.Tier == vaultmodels.HashicorpCloudVault20201125Tier(*destTier) && !d.HasChange("metrics_config") && !d.HasChange("audit_log_config") {
 				return nil
 			} else {
 				printPlusScalingWarningMsg()
@@ -625,7 +708,7 @@ func updateVaultClusterConfig(ctx context.Context, client *clients.Client, d *sc
 		}
 	}
 
-	//if is secondary since we're scaling via the primary we don't update the primary metrics/auditLog
+	// If is secondary since we're scaling via the primary we don't update the primary metrics/auditLog.
 	if isSecondary {
 		metricsConfig = nil
 		auditConfig = nil
@@ -644,7 +727,7 @@ func updateVaultClusterConfig(ctx context.Context, client *clients.Client, d *sc
 }
 
 func getClusterTier(d *schema.ResourceData) *string {
-	//if we don't change the tier, return nil so we don't pass the tier to the update
+	// If we don't change the tier, return nil so we don't pass the tier to the update.
 	if d.HasChange("tier") {
 		tier := strings.ToUpper(d.Get("tier").(string))
 		return &tier
@@ -708,6 +791,10 @@ func setVaultClusterResourceData(d *schema.ResourceData, cluster *vaultmodels.Ha
 		return err
 	}
 
+	if err := d.Set("major_version_upgrade_config", flattenMajorVersionUpgradeConfig(cluster.Config.MajorVersionUpgradeConfig, d)); err != nil {
+		return err
+	}
+
 	if publicEndpoint {
 		// Port 8200 required to communicate with HCP Vault via HTTPS
 		if err := d.Set("vault_public_endpoint_url", fmt.Sprintf("https://%s:8200", cluster.DNSNames.Public)); err != nil {
@@ -750,7 +837,10 @@ func setVaultClusterResourceData(d *schema.ResourceData, cluster *vaultmodels.Ha
 				return err
 			}
 		} else {
-			d.Set("paths_filter", nil)
+			err = d.Set("paths_filter", nil)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -811,17 +901,25 @@ func getObservabilityConfig(propertyName string, d *schema.ResourceData) (*vault
 		return nil, nil
 	}
 
-	//if we don't find the property we return the empty object to be updated and delete the configuration
+	emptyConfig := vaultmodels.HashicorpCloudVault20201125ObservabilityConfig{
+		Grafana: &vaultmodels.HashicorpCloudVault20201125Grafana{},
+		Splunk:  &vaultmodels.HashicorpCloudVault20201125Splunk{},
+		Datadog: &vaultmodels.HashicorpCloudVault20201125Datadog{},
+	}
+
+	// If we don't find the property we return the empty object to be updated and delete the configuration.
 	configParam, ok := d.GetOk(propertyName)
 	if !ok {
-		obsconfig := vaultmodels.HashicorpCloudVault20201125ObservabilityConfig{
-			Grafana: &vaultmodels.HashicorpCloudVault20201125Grafana{},
-			Splunk:  &vaultmodels.HashicorpCloudVault20201125Splunk{},
-			Datadog: &vaultmodels.HashicorpCloudVault20201125Datadog{},
-		}
-		return &obsconfig, nil
+		return &emptyConfig, nil
 	}
-	config := configParam.([]interface{})[0].(map[string]interface{})
+	configIfaceArr, ok := configParam.([]interface{})
+	if !ok || len(configIfaceArr) == 0 {
+		return &emptyConfig, nil
+	}
+	config, ok := configIfaceArr[0].(map[string]interface{})
+	if !ok {
+		return &emptyConfig, nil
+	}
 
 	return getValidObservabilityConfig(config)
 }
@@ -876,6 +974,89 @@ func getValidObservabilityConfig(config map[string]interface{}) (*vaultmodels.Ha
 	return &observabilityConfig, nil
 }
 
+func getMajorVersionUpgradeConfig(d *schema.ResourceData) (*vaultmodels.HashicorpCloudVault20201125MajorVersionUpgradeConfig, diag.Diagnostics) {
+	if !d.HasChange("major_version_upgrade_config") {
+		return nil, nil
+	}
+	configParam, ok := d.GetOk("major_version_upgrade_config")
+	if !ok {
+		return nil, nil
+	}
+
+	configIfaceArr, ok := configParam.([]interface{})
+	if !ok || len(configIfaceArr) == 0 {
+		return nil, nil
+	}
+
+	config, ok := configIfaceArr[0].(map[string]interface{})
+	if !ok {
+		return nil, nil
+	}
+
+	tier := vaultmodels.HashicorpCloudVault20201125TierDEV
+	inputTier, ok := d.GetOk("tier")
+	if ok {
+		tier = vaultmodels.HashicorpCloudVault20201125Tier(strings.ToUpper(inputTier.(string)))
+	}
+
+	if !ok || len(configIfaceArr) == 0 {
+		return nil, nil
+	}
+
+	return getValidMajorVersionUpgradeConfig(config, tier)
+}
+
+func getValidMajorVersionUpgradeConfig(config map[string]interface{}, tier vaultmodels.HashicorpCloudVault20201125Tier) (*vaultmodels.HashicorpCloudVault20201125MajorVersionUpgradeConfig, diag.Diagnostics) {
+	if tier == vaultmodels.HashicorpCloudVault20201125TierDEV || tier == vaultmodels.HashicorpCloudVault20201125TierSTARTERSMALL {
+		return nil, diag.Errorf("major version configuration is only allowed for STANDARD or PLUS clusters")
+	}
+
+	mvuConfig := vaultmodels.HashicorpCloudVault20201125MajorVersionUpgradeConfig{}
+
+	upgradeType := config["upgrade_type"].(string)
+	mvuConfigpgradeType := vaultmodels.HashicorpCloudVault20201125MajorVersionUpgradeConfigUpgradeType(upgradeType)
+	mvuConfig.UpgradeType = &mvuConfigpgradeType
+
+	maintenanceWindowDay := config["maintenance_window_day"].(string)
+	maintenanceWindowTime := config["maintenance_window_time"].(string)
+
+	if *mvuConfig.UpgradeType == vaultmodels.HashicorpCloudVault20201125MajorVersionUpgradeConfigUpgradeTypeSCHEDULED {
+		if maintenanceWindowDay == "" || maintenanceWindowTime == "" {
+			return nil, diag.Errorf("major version upgrade configuration is invalid: maintenance window configuration information missing")
+		}
+		dayOfWeek := vaultmodels.HashicorpCloudVault20201125MajorVersionUpgradeConfigMaintenanceWindowDayOfWeek(maintenanceWindowDay)
+		timeWindowUtc := vaultmodels.HashicorpCloudVault20201125MajorVersionUpgradeConfigMaintenanceWindowTimeWindowUTC(maintenanceWindowTime)
+		mvuConfig.MaintenanceWindow = &vaultmodels.HashicorpCloudVault20201125MajorVersionUpgradeConfigMaintenanceWindow{
+			DayOfWeek:     &dayOfWeek,
+			TimeWindowUtc: &timeWindowUtc,
+		}
+	} else {
+		if maintenanceWindowDay != "" || maintenanceWindowTime != "" {
+			return nil, diag.Errorf("major version upgrade configuration is invalid: maintenance window is only allowed to SCHEDULED upgrades")
+		}
+		mvuConfig.MaintenanceWindow = nil
+	}
+
+	return &mvuConfig, nil
+}
+
+func flattenMajorVersionUpgradeConfig(config *vaultmodels.HashicorpCloudVault20201125MajorVersionUpgradeConfig, d *schema.ResourceData) []interface{} {
+	if config == nil {
+		return []interface{}{}
+	}
+
+	configMap := map[string]interface{}{}
+	upgradeType := config.UpgradeType
+
+	configMap["upgrade_type"] = upgradeType
+	if *upgradeType == vaultmodels.HashicorpCloudVault20201125MajorVersionUpgradeConfigUpgradeTypeSCHEDULED && config.MaintenanceWindow != nil {
+		configMap["maintenance_window_day"] = config.MaintenanceWindow.DayOfWeek
+		configMap["maintenance_window_time"] = config.MaintenanceWindow.TimeWindowUtc
+	}
+
+	return []interface{}{configMap}
+}
+
 func resourceVaultClusterImport(ctx context.Context, d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
 	client := meta.(*clients.Client)
 
@@ -913,16 +1094,16 @@ func validatePerformanceReplicationChecksAndReturnPrimaryIfAny(ctx context.Conte
 		return err, nil
 	}
 
-	if !inPlusTier(string(primaryCluster.Config.Tier)) {
+	if !inPlusTier(string(*primaryCluster.Config.Tier)) {
 		return diag.Errorf("primary cluster (%s) must be plus-tier", primaryCluster.ID), primaryCluster
 	}
 
 	// Tier should be specified, even if secondary inherits it from the primary cluster.
-	if !strings.EqualFold(d.Get("tier").(string), string(primaryCluster.Config.Tier)) {
+	if !strings.EqualFold(d.Get("tier").(string), string(*primaryCluster.Config.Tier)) {
 		return diag.Errorf("a secondary's tier must match that of its primary (%s)", primaryCluster.ID), primaryCluster
 	}
 
-	if primaryCluster.PerformanceReplicationInfo != nil && primaryCluster.PerformanceReplicationInfo.Mode == vaultmodels.HashicorpCloudVault20201125ClusterPerformanceReplicationInfoModeSECONDARY {
+	if primaryCluster.PerformanceReplicationInfo != nil && *primaryCluster.PerformanceReplicationInfo.Mode == vaultmodels.HashicorpCloudVault20201125ClusterPerformanceReplicationInfoModeSECONDARY {
 		return diag.Errorf("primary cluster (%s) is already a secondary", primaryCluster.ID), primaryCluster
 	}
 

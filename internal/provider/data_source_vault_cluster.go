@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package provider
 
 import (
@@ -108,7 +111,7 @@ func dataSourceVaultCluster() *schema.Resource {
 				Computed:    true,
 			},
 			"paths_filter": {
-				Description: "The performance replication [paths filter](https://learn.hashicorp.com/tutorials/vault/paths-filter). Applies to performance replication secondaries only and operates in \"deny\" mode only.",
+				Description: "The performance replication [paths filter](https://developer.hashicorp.com/vault/tutorials/cloud-ops/vault-replication-terraform#review-hcpvault-tf). Applies to performance replication secondaries only and operates in \"deny\" mode only.",
 				Type:        schema.TypeList,
 				Elem: &schema.Schema{
 					Type: schema.TypeString,
@@ -116,7 +119,7 @@ func dataSourceVaultCluster() *schema.Resource {
 				Computed: true,
 			},
 			"metrics_config": {
-				Description: "The metrics configuration for export. (https://learn.hashicorp.com/tutorials/cloud/vault-metrics-guide#metrics-streaming-configuration)",
+				Description: "The metrics configuration for export. (https://developer.hashicorp.com/vault/tutorials/cloud-monitoring/vault-metrics-guide#metrics-streaming-configuration)",
 				Type:        schema.TypeList,
 				Computed:    true,
 				Optional:    true,
@@ -146,7 +149,7 @@ func dataSourceVaultCluster() *schema.Resource {
 				},
 			},
 			"audit_log_config": {
-				Description: "The audit logs configuration for export. (https://learn.hashicorp.com/tutorials/cloud/vault-metrics-guide#metrics-streaming-configuration)",
+				Description: "The audit logs configuration for export. (https://developer.hashicorp.com/vault/tutorials/cloud-monitoring/vault-metrics-guide#metrics-streaming-configuration)",
 				Type:        schema.TypeList,
 				Computed:    true,
 				Optional:    true,
@@ -169,6 +172,29 @@ func dataSourceVaultCluster() *schema.Resource {
 						},
 						"datadog_region": {
 							Description: "Datadog region for streaming audit logs",
+							Type:        schema.TypeString,
+							Computed:    true,
+						},
+					},
+				},
+			},
+			"major_version_upgrade_config": {
+				Type:     schema.TypeList,
+				Computed: true,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"upgrade_type": {
+							Description: "The major upgrade type for the cluster",
+							Type:        schema.TypeString,
+							Computed:    true,
+						},
+						"maintenance_window_day": {
+							Description: "The maintenance day of the week for scheduled updates",
+							Type:        schema.TypeString,
+							Computed:    true,
+						},
+						"maintenance_window_time": {
+							Description: "The maintenance time frame for scheduled updates",
 							Type:        schema.TypeString,
 							Computed:    true,
 						},

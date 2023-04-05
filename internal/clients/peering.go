@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package clients
 
 import (
@@ -5,8 +8,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hashicorp/hcp-sdk-go/clients/cloud-network/preview/2020-09-07/client/network_service"
-	networkmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-network/preview/2020-09-07/models"
+	"github.com/hashicorp/hcp-sdk-go/clients/cloud-network/stable/2020-09-07/client/network_service"
+	networkmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-network/stable/2020-09-07/models"
 	sharedmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-shared/v1/models"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 )
@@ -50,7 +53,7 @@ func peeringRefreshState(ctx context.Context, client *Client, peeringID string, 
 			return nil, "", err
 		}
 
-		return peering, string(peering.State), nil
+		return peering, string(*peering.State), nil
 	}
 }
 
@@ -76,7 +79,11 @@ func waitForPeeringToBe(ps peeringState) WaitFor {
 
 		result, err := stateChangeConfig.WaitForStateContext(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("error waiting for peering connection (%s) to become '%s'", peeringID, ps.Target)
+			err = fmt.Errorf("error waiting for peering connection (%s) to become '%s': %v", peeringID, ps.Target, err)
+			if result != nil {
+				return result.(*networkmodels.HashicorpCloudNetwork20200907Peering), err
+			}
+			return nil, err
 		}
 
 		return result.(*networkmodels.HashicorpCloudNetwork20200907Peering), nil
@@ -99,5 +106,8 @@ var WaitForPeeringToBeAccepted = waitForPeeringToBe(peeringState{
 // WaitForPeeringToBeActive will poll the GET peering endpoint until the state is ACTIVE, ctx is canceled, or an error occurs.
 var WaitForPeeringToBeActive = waitForPeeringToBe(peeringState{
 	Target:  PeeringStateActive,
-	Pending: []string{PeeringStateCreating, PeeringStatePendingAcceptance, PeeringStateAccepted},
+	Pending: WaitForPeeringToBeActiveStates,
 })
+
+// WaitForPeeringToBeActiveStates are those from which we'd expect an ACTIVE state to be possible.
+var WaitForPeeringToBeActiveStates = []string{PeeringStateCreating, PeeringStatePendingAcceptance, PeeringStateAccepted}

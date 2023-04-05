@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package clients
 
 import (
@@ -111,6 +114,38 @@ func UpdateVaultClusterPublicIps(ctx context.Context, client *Client, loc *share
 	return updateResp.Payload, nil
 }
 
+// UpdateVaultMajorVersionUpgradeConfig will make a call to the Vault service to update the major version upgrade config for the Vault cluster.
+func UpdateVaultMajorVersionUpgradeConfig(ctx context.Context, client *Client, loc *sharedmodels.HashicorpCloudLocationLocation, clusterID string,
+	config *vaultmodels.HashicorpCloudVault20201125MajorVersionUpgradeConfig) (vaultmodels.HashicorpCloudVault20201125UpdateMajorVersionUpgradeConfigResponse, error) {
+
+	request := &vaultmodels.HashicorpCloudVault20201125UpdateMajorVersionUpgradeConfigRequest{
+		// ClusterID and Location are repeated because the values above are required to populate the URL,
+		// and the values below are required in the API request body
+		ClusterID:   clusterID,
+		Location:    loc,
+		UpgradeType: config.UpgradeType,
+	}
+	if config.MaintenanceWindow != nil {
+		request.MaintenanceWindow = &vaultmodels.HashicorpCloudVault20201125MajorVersionUpgradeConfigMaintenanceWindow{
+			DayOfWeek:     config.MaintenanceWindow.DayOfWeek,
+			TimeWindowUtc: config.MaintenanceWindow.TimeWindowUtc,
+		}
+	}
+	updateParams := vault_service.NewUpdateMajorVersionUpgradeConfigParams()
+	updateParams.Context = ctx
+	updateParams.ClusterID = clusterID
+	updateParams.LocationProjectID = loc.ProjectID
+	updateParams.LocationOrganizationID = loc.OrganizationID
+	updateParams.Body = request
+
+	updateResp, err := client.Vault.UpdateMajorVersionUpgradeConfig(updateParams, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return updateResp.Payload, nil
+}
+
 // UpdateVaultCluster will make a call to the Vault service to update the Vault cluster configuration.
 func UpdateVaultClusterConfig(ctx context.Context, client *Client, loc *sharedmodels.HashicorpCloudLocationLocation,
 	clusterID string, tier *string, metrics *vaultmodels.HashicorpCloudVault20201125ObservabilityConfig,
@@ -120,7 +155,8 @@ func UpdateVaultClusterConfig(ctx context.Context, client *Client, loc *sharedmo
 	updateMaskPaths := []string{}
 
 	if tier != nil {
-		config.Tier = vaultmodels.HashicorpCloudVault20201125Tier(*tier)
+		tier := vaultmodels.HashicorpCloudVault20201125Tier(*tier)
+		config.Tier = &tier
 		updateMaskPaths = append(updateMaskPaths, "config.tier")
 	}
 	if metrics != nil {

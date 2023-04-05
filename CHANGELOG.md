@@ -1,3 +1,199 @@
+## v0.56.0 (March 15, 2023)
+
+IMPROVEMENTS:
+
+* Bump github.com/hashicorp/hcp-sdk-go from 0.35.0 to 0.37.0 [[GH-482](https://github.com/hashicorp/terraform-provider-hcp/pull/482)]
+
+BUG FIXES:
+
+* Update pricing information for vault and consul. [[GH-480](https://github.com/hashicorp/terraform-provider-hcp/pull/480)]
+## v0.55.0 (March 08, 2023)
+
+FEATURES:
+
+* New field `ip_allowlist` for `hcp_consul_cluster` to create, or update allowed IP address ranges (CIDRs) for inbound traffic. [[GH-455](https://github.com/hashicorp/terraform-provider-hcp/pull/455)]
+
+IMPROVEMENTS:
+
+* Add cluster scaling acceptance tests for Azure [[GH-465](https://github.com/hashicorp/terraform-provider-hcp/pull/465)]
+* Bump github.com/hashicorp/hcp-sdk-go from 0.31.0 to 0.35.0 [[GH-458](https://github.com/hashicorp/terraform-provider-hcp/pull/458)]
+* Bump github.com/hashicorp/terraform-plugin-sdk/v2 from 2.24.1 to 2.25.0 [[GH-459](https://github.com/hashicorp/terraform-provider-hcp/pull/459)]
+* Bump google.golang.org/grpc from 1.52.3 to 1.53.0 [[GH-452](https://github.com/hashicorp/terraform-provider-hcp/pull/452)]
+
+BUG FIXES:
+
+* resource/hcp_packer_channel: Fix documentation for incorrectly documented attributes [[GH-462](https://github.com/hashicorp/terraform-provider-hcp/pull/462)]
+## v0.54.0 (February 15, 2023)
+
+FEATURES:
+
+* New resource `hcp_packer_channel` to create, or update an existing, channel with or without an assigned iteration. [[GH-435](https://github.com/hashicorp/terraform-provider-hcp/pull/435)]
+
+IMPROVEMENTS:
+
+* Bump github.com/hashicorp/hcp-sdk-go from 0.28.0 to 0.29.0 [[GH-431](https://github.com/hashicorp/terraform-provider-hcp/pull/431)]
+* Bump github.com/hashicorp/hcp-sdk-go from 0.29.0 to 0.31.0 [[GH-445](https://github.com/hashicorp/terraform-provider-hcp/pull/445)]
+* Bump google.golang.org/grpc from 1.51.0 to 1.52.3 [[GH-444](https://github.com/hashicorp/terraform-provider-hcp/pull/444)]
+* Refactor HCP Vault TF acceptance test harness to include test for Azure [[GH-441](https://github.com/hashicorp/terraform-provider-hcp/pull/441)]
+* resource/hcp_packer_channel: Label resource as public beta [[GH-457](https://github.com/hashicorp/terraform-provider-hcp/pull/457)]
+
+BUG FIXES:
+
+* Do not exit acceptance test when provider returns a warning [[GH-448](https://github.com/hashicorp/terraform-provider-hcp/pull/448)]
+## v0.53.0 (January 20, 2023)
+
+FEATURES:
+
+* Automatically sync the public and internal repos. [[GH-436](https://github.com/hashicorp/terraform-provider-hcp/pull/436)]
+
+IMPROVEMENTS:
+
+* Add linting checks to PR and release pipeline. [[GH-430](https://github.com/hashicorp/terraform-provider-hcp/pull/430)]
+* Update auth guide. [[GH-434](https://github.com/hashicorp/terraform-provider-hcp/pull/434)]
+* Update hcp_consul_cluster and hcp_consul_cluster_root_token docs [[GH-439](https://github.com/hashicorp/terraform-provider-hcp/pull/439)]
+* Use unique clusterIDs in acceptance tests [[GH-437](https://github.com/hashicorp/terraform-provider-hcp/pull/437)]
+
+BUG FIXES:
+
+* Fix issue with E2E tests failing [[GH-440](https://github.com/hashicorp/terraform-provider-hcp/pull/440)]
+## v0.52.0 (December 14, 2022)
+
+IMPROVEMENTS:
+
+* Enable automatic changelog creation for dependabot PRs. [[GH-429](https://github.com/hashicorp/terraform-provider-hcp/pull/429)]
+## v0.51.0 (December 08, 2022)
+
+IMPROVEMENTS:
+
+* Add E2E tests to auto release pipeline [[GH-421](https://github.com/hashicorp/terraform-provider-hcp/pull/421)]
+* Bump github.com/hashicorp/hcp-sdk-go from 0.24.0 to 0.27.0 [[GH-424](https://github.com/hashicorp/terraform-provider-hcp/pull/424)]
+
+BUG FIXES:
+
+* Add check for "v" when compiling changelog [[GH-423](https://github.com/hashicorp/terraform-provider-hcp/pull/423)]
+* Increase `hcp_consul_cluster` create timeout to 35 minutes [[GH-427](https://github.com/hashicorp/terraform-provider-hcp/pull/427)]
+* The example usage for `hcp_azure_peering_connection` was missing the `vnet`
+resource reference. [[GH-425](https://github.com/hashicorp/terraform-provider-hcp/pull/425)]
+## v0.50.0 (November 30, 2022)
+
+IMPROVEMENTS:
+
+* Automatically update docs on auto release [[GH-419](https://github.com/hashicorp/terraform-provider-hcp/pull/419)]
+* Bump google.golang.org/grpc from 1.50.1 to 1.51.0 [[GH-418](https://github.com/hashicorp/terraform-provider-hcp/pull/418)]
+* Bumps github.com/go-openapi/runtime from 0.24.2 to 0.25.0 [[GH-422](https://github.com/hashicorp/terraform-provider-hcp/pull/422)]
+* Set up auto release capability [[GH-411](https://github.com/hashicorp/terraform-provider-hcp/pull/411)]
+## v0.49.0 (November 16, 2022)
+
+IMPROVEMENTS:
+
+* provider: Bump `github.com/hashicorp/terraform-plugin-sdk/v2` from 2.24.0 to 2.24.1 ([GH-415](https://github.com/hashicorp/terraform-provider-hcp/pull/415))
+* provider: Bump `github.com/hashicorp/hcp-sdk-go` from 0.23.0 to 0.24.0 ([GH-413](https://github.com/hashicorp/terraform-provider-hcp/pull/413))
+* docs: Update the tutorial links ([GH-414](https://github.com/hashicorp/terraform-provider-hcp/pull/414))
+* docs: Updates browser login documentation ([GH-412](https://github.com/hashicorp/terraform-provider-hcp/pull/412))
+
+## 0.48.0 (November 9, 2022)
+
+IMPROVEMENTS:
+
+* provider: Bump `github.com/stretchr/testify` from 1.8.0 to 1.8.1 ([GH-408](https://github.com/hashicorp/terraform-provider-hcp/pull/408))
+* provider: Auto detect latest Consul patch version ([GH-406](https://github.com/hashicorp/terraform-provider-hcp/pull/406))
+
+## 0.47.0 (October 21, 2022)
+
+IMPROVEMENTS:
+
+* provider: Bump `github.com/hashicorp/terraform-plugin-sdk/v2` from 2.23.0 to 2.24.0 ([GH-403](https://github.com/hashicorp/terraform-provider-hcp/pull/403))
+* provider: Bump `github.com/go-openapi/runtime` from 0.24.1 to 0.24.2 ([GH-404](https://github.com/hashicorp/terraform-provider-hcp/pull/404))
+* provider: Bump `google.golang.org/grpc` from 1.50.0 to 1.50.1 ([GH-405](https://github.com/hashicorp/terraform-provider-hcp/pull/405))
+
+## 0.46.0 (October 13, 2022)
+
+IMPROVEMENTS:
+
+* provider: Update Mozilla Public License 2.0 [GH-402](https://github.com/hashicorp/terraform-provider-hcp/pull/402))
+* provider: Bump `google.golang.org/grpc` from 1.49.0 to 1.50.0 ([GH-401](https://github.com/hashicorp/terraform-provider-hcp/pull/401))
+* provider: Bump `github.com/hashicorp/terraform-plugin-sdk/v2` from 2.21.0 to 2.23.0 ([GH-395](https://github.com/hashicorp/terraform-provider-hcp/pull/395))
+
+FIXES:
+
+* docs: Add note in vault resource that only admins can modify cluster tier and size ([GH-400](https://github.com/hashicorp/terraform-provider-hcp/pull/400))
+
+## 0.45.0 (September 26, 2022)
+
+IMPROVEMENTS:
+
+* provider: Bump `github.com/hashicorp/hcp-sdk-go` from 0.21.0 to 0.23.0. Note this change introduces some breaking changes when using model enums. More information can be found in the [HCP Go SDK Release](https://github.com/hashicorp/hcp-sdk-go/releases/tag/v0.23.0)  ([GH-392](https://github.com/hashicorp/terraform-provider-hcp/pull/392))
+
+FIXES:
+
+* provider: Prevent FAILED peerings/attachments from failing deletes  ([GH-394](https://github.com/hashicorp/terraform-provider-hcp/pull/394))
+
+## 0.44.0 (September 9, 2022)
+
+FIXES:
+
+* Azure/AWS Peering connections: Replace ReadContext with ReadWithoutTimeout  ([GH-389](https://github.com/hashicorp/terraform-provider-hcp/pull/389))
+* Documentation: Correct `hvn_link` to `example` instead of `hvn` ([GH-388](https://github.com/hashicorp/terraform-provider-hcp/pull/388))
+
+## 0.43.0 (August 31, 2022)
+
+IMPROVEMENTS:
+
+* provider: Bump `github.com/hashicorp/hcp-sdk-go` from 0.20.0 to 0.21.0 ([GH-381](https://github.com/hashicorp/terraform-provider-hcp/pull/381))
+* provider: Added support for HCP Boundary Beta clusters ([GH-378](https://github.com/hashicorp/terraform-provider-hcp/pull/378))
+
+FEATURES:
+
+* Vault: enable changes on mvu configuration  ([GH-383](https://github.com/hashicorp/terraform-provider-hcp/pull/383))
+
+## 0.42.0 (August 24, 2022)
+
+IMPROVEMENTS:
+
+* provider: Bump version of Go to 1.18.5 in `.go-version` ([GH-374](https://github.com/hashicorp/terraform-provider-hcp/pull/374))
+* provider: Bump `google.golang.org/grpc` from 1.48.0 to 1.49.0 ([GH-379](https://github.com/hashicorp/terraform-provider-hcp/pull/379))
+
+FIXES:
+
+* all: Prevents the app from crashing when a `*url.Error` is received while retrying HTTP requests. ([GH-376](https://github.com/hashicorp/terraform-provider-hcp/pull/376))
+
+## 0.41.0 (August 18, 2022)
+
+IMPROVEMENTS:
+
+* provider: Upgrade terraform-plugin-sdk to version 2.21.0 ([GH-371](https://github.com/hashicorp/terraform-provider-hcp/pull/371))
+
+FIXES:
+
+* provider: Updates README examples ([GH-368](https://github.com/hashicorp/terraform-provider-hcp/pull/368))
+* provider: Fix root token example in documentation ([GH-372](https://github.com/hashicorp/terraform-provider-hcp/pull/372))
+
+## 0.40.0 (August 11, 2022)
+
+FIXES:
+
+* provider: Updates codeowners ([GH-369](https://github.com/hashicorp/terraform-provider-hcp/pull/369))
+
+## 0.39.0 (August 5, 2022)
+
+FIXES:
+
+* provider: Fixes codeowners which showed errors after a recent team name update ([GH-366](https://github.com/hashicorp/terraform-provider-hcp/pull/366))
+* vault_cluster: Check type assertions to fix issue #360 ([GH-364](https://github.com/hashicorp/terraform-provider-hcp/pull/364))
+
+IMPROVEMENTS:
+
+* provider: Upgrade Go to version 1.18 ([GH-365](https://github.com/hashicorp/terraform-provider-hcp/pull/365))
+* data_source_azure_peering_connection: Log failed peering wait errors ([GH-363](https://github.com/hashicorp/terraform-provider-hcp/pull/363))
+* provider: Bump `github.com/hashicorp/terraform-plugin-sdk/v2` from 2.19.0 to 2.20.0 ([GH-362](https://github.com/hashicorp/terraform-provider-hcp/pull/362))
+
+## 0.38.0 (July 28, 2022)
+
+IMPROVEMENTS:
+
+* provider: Bump `hcp-sdk-go` from 0.19.0 to 0.20.0 ([#357](https://github.com/hashicorp/terraform-provider-hcp/pull/357))
+* provider: Add retry logic on GET requests when fetching organization and project IDs ([#358](https://github.com/hashicorp/terraform-provider-hcp/pull/358))
+
 ## 0.37.0 (July 20,2022)
 
 IMPROVEMENTS:

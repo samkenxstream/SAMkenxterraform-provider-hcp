@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package provider
 
 import (
@@ -8,7 +11,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-version"
-	consulmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-consul-service/preview/2021-02-04/models"
+	consulmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-consul-service/stable/2021-02-04/models"
 	sharedmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-shared/v1/models"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
@@ -28,15 +31,7 @@ var createUpdateConsulClusterTimeout = time.Minute * 35
 
 // deleteTimeout is the amount of time that can elapse
 // before a cluster delete operation should timeout.
-var deleteConsulClusterTimeout = time.Minute * 25
-
-// consulCusterResourceCloudProviders is the list of cloud providers
-// where a HCP Consul cluster can be provisioned.
-var consulCusterResourceCloudProviders = []string{
-	"aws",
-	// Available to internal users only
-	"azure",
-}
+var deleteConsulClusterTimeout = time.Minute * 35
 
 // resourceConsulCluster represents an HCP Consul cluster.
 func resourceConsulCluster() *schema.Resource {
@@ -72,13 +67,13 @@ func resourceConsulCluster() *schema.Resource {
 				ValidateDiagFunc: validateSlugID,
 			},
 			"tier": {
-				Description:      "The tier that the HCP Consul cluster will be provisioned as.  Only `development`, `standard` and `plus` are available at this time. See [pricing information](https://cloud.hashicorp.com/pricing/consul).",
+				Description:      "The tier that the HCP Consul cluster will be provisioned as.  Only `development`, `standard` and `plus` are available at this time. See [pricing information](https://www.hashicorp.com/products/consul/pricing).",
 				Type:             schema.TypeString,
 				Required:         true,
 				ForceNew:         true,
 				ValidateDiagFunc: validateConsulClusterTier,
 				DiffSuppressFunc: func(_, old, new string, _ *schema.ResourceData) bool {
-					return strings.ToLower(old) == strings.ToLower(new)
+					return strings.EqualFold(old, new)
 				},
 			},
 			// optional fields
@@ -90,7 +85,7 @@ func resourceConsulCluster() *schema.Resource {
 				ForceNew:    true,
 			},
 			"min_consul_version": {
-				Description:      "The minimum Consul version of the cluster. If not specified, it is defaulted to the version that is currently recommended by HCP.",
+				Description:      "The minimum Consul patch version of the cluster. Allows only the rightmost version component to increment (E.g: `1.13.0` will allow installation of `1.13.2` and `1.13.3` etc., but not `1.14.0`). If not specified, it is defaulted to the version that is currently recommended by HCP.",
 				Type:             schema.TypeString,
 				Optional:         true,
 				ValidateDiagFunc: validateSemVer,
@@ -139,7 +134,7 @@ func resourceConsulCluster() *schema.Resource {
 				Computed:         true,
 				ValidateDiagFunc: validateConsulClusterSize,
 				DiffSuppressFunc: func(_, old, new string, _ *schema.ResourceData) bool {
-					return strings.ToLower(old) == strings.ToLower(new)
+					return strings.EqualFold(old, new)
 				},
 			},
 			"auto_hvn_to_hvn_peering": {
@@ -215,13 +210,35 @@ func resourceConsulCluster() *schema.Resource {
 				Type:        schema.TypeString,
 				Computed:    true,
 			},
+			"ip_allowlist": {
+				Description: "Allowed IPV4 address ranges (CIDRs) for inbound traffic. Each entry must be a unique CIDR. Maximum 3 CIDRS supported at this time.",
+				Type:        schema.TypeList,
+				Optional:    true,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"address": {
+							Description:      "IP address range in CIDR notation.",
+							Type:             schema.TypeString,
+							Required:         true,
+							ValidateDiagFunc: validateConsulClusterCIDR,
+						},
+						"description": {
+							Description:      "Description to help identify source (maximum 255 chars).",
+							Type:             schema.TypeString,
+							Optional:         true,
+							ValidateDiagFunc: validateConsulClusterCIDRDescription,
+						},
+					},
+				},
+				MaxItems: 3,
+			},
 			"consul_root_token_accessor_id": {
-				Description: "The accessor ID of the root ACL token that is generated upon cluster creation. If a new root token is generated using the `hcp_consul_root_token` resource, this field is no longer valid.",
+				Description: "The accessor ID of the root ACL token that is generated upon cluster creation.",
 				Type:        schema.TypeString,
 				Computed:    true,
 			},
 			"consul_root_token_secret_id": {
-				Description: "The secret ID of the root ACL token that is generated upon cluster creation. If a new root token is generated using the `hcp_consul_root_token` resource, this field is no longer valid.",
+				Description: "The secret ID of the root ACL token that is generated upon cluster creation.",
 				Type:        schema.TypeString,
 				Computed:    true,
 				Sensitive:   true,
@@ -238,10 +255,6 @@ func resourceConsulCluster() *schema.Resource {
 			},
 		},
 	}
-}
-
-type providerMeta struct {
-	ModuleName string `cty:"module_name"`
 }
 
 func resourceConsulClusterCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
@@ -295,6 +308,11 @@ func resourceConsulClusterCreate(ctx context.Context, d *schema.ResourceData, me
 	v, ok := d.GetOk("min_consul_version")
 	if ok {
 		consulVersion = input.NormalizeVersion(v.(string))
+
+		// Attempt to get the latest patch version of the given min_consul_version.
+		if patch := consul.GetLatestPatch(consulVersion, availableConsulVersions); patch != "" {
+			consulVersion = input.NormalizeVersion(patch)
+		}
 	}
 
 	// check if version is valid and available
@@ -303,10 +321,10 @@ func resourceConsulClusterCreate(ctx context.Context, d *schema.ResourceData, me
 	}
 
 	// If specified, validate and parse the primary link provided for federation.
-	primary_link, ok := d.GetOk("primary_link")
+	primaryLink, ok := d.GetOk("primary_link")
 	var primary *sharedmodels.HashicorpCloudLocationLink
 	if ok {
-		primary, err = parseLinkURL(primary_link.(string), ConsulClusterResourceType)
+		primary, err = parseLinkURL(primaryLink.(string), ConsulClusterResourceType)
 		if err != nil {
 			return diag.Errorf(err.Error())
 		}
@@ -336,13 +354,32 @@ func resourceConsulClusterCreate(ctx context.Context, d *schema.ResourceData, me
 	// The peering happens within the secondary cluster create operation.
 	autoHvnToHvnPeering := d.Get("auto_hvn_to_hvn_peering").(bool)
 
+	// Convert ip_allowlist to consul model.
+	cidrs := d.Get("ip_allowlist").([]interface{})
+	ipAllowlist, err := buildIPAllowlist(cidrs)
+	if err != nil {
+		return diag.Errorf("Invalid ip_allowlist for Consul cluster (%s): %v", clusterID, err)
+	}
+
 	log.Printf("[INFO] Creating Consul cluster (%s)", clusterID)
+
+	var tier *consulmodels.HashicorpCloudConsul20210204ClusterConfigTier
+	t, ok := d.GetOk("tier")
+	if ok {
+		tier = consulmodels.HashicorpCloudConsul20210204ClusterConfigTier(strings.ToUpper(t.(string))).Pointer()
+	}
+
+	var size *consulmodels.HashicorpCloudConsul20210204CapacityConfigSize
+	s, ok := d.GetOk("size")
+	if ok {
+		size = consulmodels.HashicorpCloudConsul20210204CapacityConfigSize(strings.ToUpper(s.(string))).Pointer()
+	}
 
 	consulCuster := &consulmodels.HashicorpCloudConsul20210204Cluster{
 		Config: &consulmodels.HashicorpCloudConsul20210204ClusterConfig{
-			Tier: consulmodels.HashicorpCloudConsul20210204ClusterConfigTier(strings.ToUpper(d.Get("tier").(string))),
+			Tier: tier,
 			CapacityConfig: &consulmodels.HashicorpCloudConsul20210204CapacityConfig{
-				Size: consulmodels.HashicorpCloudConsul20210204CapacityConfigSize(strings.ToUpper(d.Get("size").(string))),
+				Size: size,
 			},
 			ConsulConfig: &consulmodels.HashicorpCloudConsul20210204ConsulConfig{
 				ConnectEnabled: connectEnabled,
@@ -351,8 +388,9 @@ func resourceConsulClusterCreate(ctx context.Context, d *schema.ResourceData, me
 			},
 			MaintenanceConfig: nil,
 			NetworkConfig: &consulmodels.HashicorpCloudConsul20210204NetworkConfig{
-				Network: newLink(loc, "hvn", hvnID),
-				Private: !publicEndpoint,
+				Network:     newLink(loc, "hvn", hvnID),
+				Private:     !publicEndpoint,
+				IPAllowlist: ipAllowlist,
 			},
 			AutoHvnToHvnPeering: autoHvnToHvnPeering,
 		},
@@ -510,21 +548,36 @@ func setConsulClusterResourceData(d *schema.ResourceData, cluster *consulmodels.
 	}
 
 	link := newLink(cluster.Location, ConsulClusterResourceType, cluster.ID)
-	self_link, err := linkURL(link)
+	selfLink, err := linkURL(link)
 	if err != nil {
 		return err
 	}
-	if err := d.Set("self_link", self_link); err != nil {
+	if err := d.Set("self_link", selfLink); err != nil {
 		return err
 	}
 
 	if cluster.Config.ConsulConfig.Primary != nil {
 		link := newLink(cluster.Config.ConsulConfig.Primary.Location, ConsulClusterResourceType, cluster.Config.ConsulConfig.Primary.ID)
-		primary_link, err := linkURL(link)
+		primaryLink, err := linkURL(link)
 		if err != nil {
 			return err
 		}
-		if err := d.Set("primary_link", primary_link); err != nil {
+		if err := d.Set("primary_link", primaryLink); err != nil {
+			return err
+		}
+	}
+
+	if cluster.Config.NetworkConfig != nil {
+		ipAllowlist := make([]map[string]interface{}, len(cluster.Config.NetworkConfig.IPAllowlist))
+		for i, cidrRange := range cluster.Config.NetworkConfig.IPAllowlist {
+			cidr := map[string]interface{}{
+				"description": cidrRange.Description,
+				"address":     cidrRange.Address,
+			}
+			ipAllowlist[i] = cidr
+		}
+
+		if err := d.Set("ip_allowlist", ipAllowlist); err != nil {
 			return err
 		}
 	}
@@ -573,7 +626,7 @@ func resourceConsulClusterRead(ctx context.Context, d *schema.ResourceData, meta
 	}
 
 	// we should only ever get a CodeNotFound response if the cluster is deleted. The below is precautionary
-	if cluster.State == consulmodels.HashicorpCloudConsul20210204ClusterStateDELETED {
+	if *cluster.State == consulmodels.HashicorpCloudConsul20210204ClusterStateDELETED {
 		log.Printf("[WARN] Consul cluster (%s) was deleted", clusterID)
 		d.SetId("")
 		return nil
@@ -624,9 +677,10 @@ func resourceConsulClusterUpdate(ctx context.Context, d *schema.ResourceData, me
 	// Confirm update fields have been changed
 	sizeChanged := d.HasChange("size")
 	versionChanged := d.HasChange("min_consul_version")
+	ipAllowlistChanged := d.HasChange("ip_allowlist")
 
-	if !sizeChanged && !versionChanged {
-		return diag.Errorf("at least one of: [min_consul_version, size] is required in order to update the cluster")
+	if !sizeChanged && !versionChanged && !ipAllowlistChanged {
+		return diag.Errorf("at least one of: [min_consul_version, size, ip_allowlist] is required in order to update the cluster")
 	}
 
 	targetCluster := consulmodels.HashicorpCloudConsul20210204Cluster{
@@ -650,6 +704,11 @@ func resourceConsulClusterUpdate(ctx context.Context, d *schema.ResourceData, me
 		version := d.Get("min_consul_version")
 		newConsulVersion := input.NormalizeVersion(version.(string))
 
+		// Attempt to get the latest patch version of the given min_consul_version.
+		if patch := consul.GetLatestPatch(newConsulVersion, upgradeVersions); patch != "" {
+			newConsulVersion = input.NormalizeVersion(patch)
+		}
+
 		// Check that there are any valid upgrade versions
 		if upgradeVersions == nil {
 			return diag.Errorf("no upgrade versions of Consul are available for this cluster; you may already be on the latest Consul version supported by HCP")
@@ -665,11 +724,32 @@ func resourceConsulClusterUpdate(ctx context.Context, d *schema.ResourceData, me
 
 	if sizeChanged {
 		newSize := d.Get("size").(string)
+		size := consulmodels.HashicorpCloudConsul20210204CapacityConfigSize(strings.ToUpper(newSize))
 		targetCluster.Config = &consulmodels.HashicorpCloudConsul20210204ClusterConfig{
 			CapacityConfig: &consulmodels.HashicorpCloudConsul20210204CapacityConfig{
-				Size: consulmodels.HashicorpCloudConsul20210204CapacityConfigSize(strings.ToUpper(newSize)),
+				Size: &size,
 			},
 		}
+	}
+
+	if ipAllowlistChanged {
+		cidrs := d.Get("ip_allowlist").([]interface{})
+		ipAllowlist, err := buildIPAllowlist(cidrs)
+		if err != nil {
+			return diag.Errorf("Invalid ip_allowlist for Consul cluster (%s): %v", clusterID, err)
+		}
+
+		// Do not override if previous config objects exist.
+		if targetCluster.Config == nil {
+			targetCluster.Config = &consulmodels.HashicorpCloudConsul20210204ClusterConfig{}
+		}
+
+		if targetCluster.Config.NetworkConfig == nil {
+			targetCluster.Config.NetworkConfig = &consulmodels.HashicorpCloudConsul20210204NetworkConfig{}
+		}
+
+		// Update IP allowlist.
+		targetCluster.Config.NetworkConfig.IPAllowlist = ipAllowlist
 	}
 
 	// Invoke update cluster endpoint
@@ -755,4 +835,24 @@ func resourceConsulClusterImport(ctx context.Context, d *schema.ResourceData, me
 	d.SetId(url)
 
 	return []*schema.ResourceData{d}, nil
+}
+
+// buildIPAllowlist returns a consul model for the IP allowlist.
+func buildIPAllowlist(cidrs []interface{}) ([]*consulmodels.HashicorpCloudConsul20210204CidrRange, error) {
+	ipAllowList := make([]*consulmodels.HashicorpCloudConsul20210204CidrRange, len(cidrs))
+
+	for i, cidr := range cidrs {
+		cidrMap := cidr.(map[string]interface{})
+		address := cidrMap["address"].(string)
+		description := cidrMap["description"].(string)
+
+		cidrRange := &consulmodels.HashicorpCloudConsul20210204CidrRange{
+			Address:     address,
+			Description: description,
+		}
+
+		ipAllowList[i] = cidrRange
+	}
+
+	return ipAllowList, nil
 }

@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package provider
 
 import (
@@ -8,7 +11,7 @@ import (
 
 	sharedmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-shared/v1/models"
 
-	consulmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-consul-service/preview/2021-02-04/models"
+	consulmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-consul-service/stable/2021-02-04/models"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 
@@ -139,7 +142,10 @@ func resourceConsulSnapshotCreate(ctx context.Context, d *schema.ResourceData, m
 	d.SetId(url)
 
 	// set the consul_version based on the cluster's Consul version
-	d.Set("consul_version", cluster.ConsulVersion)
+	err = d.Set("consul_version", cluster.ConsulVersion)
+	if err != nil {
+		return diag.FromErr(err)
+	}
 
 	// wait for the Consul snapshot to be created
 	if err := clients.WaitForOperation(ctx, client, ConsulSnapshotResourceType+".create", cluster.Location, createResp.Operation.ID); err != nil {

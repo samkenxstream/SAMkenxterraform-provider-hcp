@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package provider
 
 import (
@@ -8,8 +11,8 @@ import (
 
 	sharedmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-shared/v1/models"
 
-	"github.com/hashicorp/hcp-sdk-go/clients/cloud-network/preview/2020-09-07/client/network_service"
-	networkmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-network/preview/2020-09-07/models"
+	"github.com/hashicorp/hcp-sdk-go/clients/cloud-network/stable/2020-09-07/client/network_service"
+	networkmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-network/stable/2020-09-07/models"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 
@@ -58,7 +61,7 @@ func resourceHvn() *schema.Resource {
 				ForceNew:         true,
 				ValidateDiagFunc: validateStringInSlice(hvnResourceCloudProviders, true),
 				DiffSuppressFunc: func(_, old, new string, _ *schema.ResourceData) bool {
-					return strings.ToLower(old) == strings.ToLower(new)
+					return strings.EqualFold(old, new)
 				},
 			},
 			"region": {
@@ -67,7 +70,7 @@ func resourceHvn() *schema.Resource {
 				Required:    true,
 				ForceNew:    true,
 				DiffSuppressFunc: func(_, old, new string, _ *schema.ResourceData) bool {
-					return strings.ToLower(old) == strings.ToLower(new)
+					return strings.EqualFold(old, new)
 				},
 			},
 			// Optional inputs
@@ -209,7 +212,7 @@ func resourceHvnRead(ctx context.Context, d *schema.ResourceData, meta interface
 	}
 
 	// The HVN has already been deleted, remove from state.
-	if hvn.State == networkmodels.HashicorpCloudNetwork20200907NetworkStateDELETED {
+	if *hvn.State == networkmodels.HashicorpCloudNetwork20200907NetworkStateDELETED {
 		log.Printf("[WARN] HVN (%s) failed to provision, removing from state", hvnID)
 		d.SetId("")
 		return nil

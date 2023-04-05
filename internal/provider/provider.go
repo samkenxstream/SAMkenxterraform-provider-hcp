@@ -1,16 +1,19 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package provider
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 
-	"github.com/hashicorp/hcp-sdk-go/clients/cloud-resource-manager/preview/2019-12-10/client/organization_service"
-	"github.com/hashicorp/hcp-sdk-go/clients/cloud-resource-manager/preview/2019-12-10/client/project_service"
-	"github.com/hashicorp/hcp-sdk-go/clients/cloud-resource-manager/preview/2019-12-10/models"
+	"github.com/hashicorp/hcp-sdk-go/clients/cloud-resource-manager/stable/2019-12-10/client/organization_service"
+	"github.com/hashicorp/hcp-sdk-go/clients/cloud-resource-manager/stable/2019-12-10/client/project_service"
+	"github.com/hashicorp/hcp-sdk-go/clients/cloud-resource-manager/stable/2019-12-10/models"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 
@@ -25,6 +28,7 @@ func New() func() *schema.Provider {
 				"hcp_aws_network_peering":            dataSourceAwsNetworkPeering(),
 				"hcp_aws_transit_gateway_attachment": dataSourceAwsTransitGatewayAttachment(),
 				"hcp_azure_peering_connection":       dataSourceAzurePeeringConnection(),
+				"hcp_boundary_cluster":               dataSourceBoundaryCluster(),
 				"hcp_consul_agent_helm_config":       dataSourceConsulAgentHelmConfig(),
 				"hcp_consul_agent_kubernetes_secret": dataSourceConsulAgentKubernetesSecret(),
 				"hcp_consul_cluster":                 dataSourceConsulCluster(),
@@ -41,12 +45,14 @@ func New() func() *schema.Provider {
 				"hcp_aws_network_peering":            resourceAwsNetworkPeering(),
 				"hcp_aws_transit_gateway_attachment": resourceAwsTransitGatewayAttachment(),
 				"hcp_azure_peering_connection":       resourceAzurePeeringConnection(),
+				"hcp_boundary_cluster":               resourceBoundaryCluster(),
 				"hcp_consul_cluster":                 resourceConsulCluster(),
 				"hcp_consul_cluster_root_token":      resourceConsulClusterRootToken(),
 				"hcp_consul_snapshot":                resourceConsulSnapshot(),
 				"hcp_hvn":                            resourceHvn(),
 				"hcp_hvn_peering_connection":         resourceHvnPeeringConnection(),
 				"hcp_hvn_route":                      resourceHvnRoute(),
+				"hcp_packer_channel":                 resourcePackerChannel(),
 				"hcp_vault_cluster":                  resourceVaultCluster(),
 				"hcp_vault_cluster_admin_token":      resourceVaultClusterAdminToken(),
 			},
@@ -126,10 +132,10 @@ func configure(p *schema.Provider) func(context.Context, *schema.ResourceData) (
 // getProjectFromCredentials uses the configured client credentials to
 // fetch the associated organization and returns that organization's
 // single project.
-func getProjectFromCredentials(ctx context.Context, client *clients.Client) (*models.HashicorpCloudResourcemanagerProject, error) {
+func getProjectFromCredentials(ctx context.Context, client *clients.Client) (*models.ResourcemanagerProject, error) {
 	// Get the organization ID.
 	listOrgParams := organization_service.NewOrganizationServiceListParams()
-	listOrgResp, err := client.Organization.OrganizationServiceList(listOrgParams, nil)
+	listOrgResp, err := clients.RetryOrganizationServiceList(client, listOrgParams)
 	if err != nil {
 		return nil, fmt.Errorf("unable to fetch organization list: %v", err)
 	}
@@ -142,9 +148,9 @@ func getProjectFromCredentials(ctx context.Context, client *clients.Client) (*mo
 	// Get the project using the organization ID.
 	listProjParams := project_service.NewProjectServiceListParams()
 	listProjParams.ScopeID = &orgID
-	scopeType := string(models.HashicorpCloudResourcemanagerResourceIDResourceTypeORGANIZATION)
+	scopeType := string(models.ResourceIDResourceTypeORGANIZATION)
 	listProjParams.ScopeType = &scopeType
-	listProjResp, err := client.Project.ProjectServiceList(listProjParams, nil)
+	listProjResp, err := clients.RetryProjectServiceList(client, listProjParams)
 	if err != nil {
 		return nil, fmt.Errorf("unable to fetch project id: %v", err)
 	}
@@ -157,7 +163,7 @@ func getProjectFromCredentials(ctx context.Context, client *clients.Client) (*mo
 }
 
 // Status endpoint for prod.
-const statuspageUrl = "https://status.hashicorp.com/api/v2/components.json"
+const statuspageURL = "https://status.hashicorp.com/api/v2/components.json"
 
 var hcpComponentIds = map[string]string{
 	"0q55nwmxngkc": "HCP API",
@@ -178,17 +184,8 @@ type component struct {
 
 type status string
 
-// Possible statuses returned by statuspage.io.
-const (
-	operational         status = "operational"
-	degradedPerformance        = "degraded_performance"
-	partialOutage              = "partial_outage"
-	majorOutage                = "major_outage"
-	underMaintenance           = "under_maintenance"
-)
-
 func isHCPOperational() (diags diag.Diagnostics) {
-	req, err := http.NewRequest("GET", statuspageUrl, nil)
+	req, err := http.NewRequest("GET", statuspageURL, nil)
 	if err != nil {
 		diags = append(diags, diag.Diagnostic{
 			Severity: diag.Warning,
@@ -212,7 +209,7 @@ func isHCPOperational() (diags diag.Diagnostics) {
 	}
 	defer resp.Body.Close()
 
-	jsBytes, err := ioutil.ReadAll(resp.Body)
+	jsBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		diags = append(diags, diag.Diagnostic{
 			Severity: diag.Warning,
@@ -256,9 +253,7 @@ func isHCPOperational() (diags diag.Diagnostics) {
 		diags = append(diags, diag.Diagnostic{
 			Severity: diag.Warning,
 			Summary:  "You may experience issues using HCP.",
-			Detail: fmt.Sprintf("HCP is reporting the following:\n\n") +
-				printStatus(systemStatus) +
-				"\nPlease check https://status.hashicorp.com for more details.",
+			Detail:   fmt.Sprintf("HCP is reporting the following:\n\n%v\nPlease check https://status.hashicorp.com for more details.", printStatus(systemStatus)),
 		})
 	}
 
@@ -275,7 +270,7 @@ func printStatus(m map[string]status) string {
 
 	pr := ""
 	for k, v := range m {
-		pr = pr + fmt.Sprintf("%s:%*s %s\n", k, 5+(maxLenKey-len(k)), " ", v)
+		pr += fmt.Sprintf("%s:%*s %s\n", k, 5+(maxLenKey-len(k)), " ", v)
 	}
 
 	return pr

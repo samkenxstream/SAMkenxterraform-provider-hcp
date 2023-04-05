@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package provider
 
 import (
@@ -7,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	networkmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-network/preview/2020-09-07/models"
+	networkmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-network/stable/2020-09-07/models"
 	sharedmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-shared/v1/models"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
@@ -300,19 +303,19 @@ func resourceHVNRouteImport(ctx context.Context, d *schema.ResourceData, meta in
 	}
 
 	routeLink := newLink(loc, HVNRouteResourceType, routeID)
-	routeUrl, err := linkURL(routeLink)
+	routeURL, err := linkURL(routeLink)
 	if err != nil {
 		return nil, err
 	}
-	d.SetId(routeUrl)
+	d.SetId(routeURL)
 
 	hvnLink := newLink(loc, HvnResourceType, hvnID)
-	hvnUrl, err := linkURL(hvnLink)
+	hvnURL, err := linkURL(hvnLink)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := d.Set("hvn_link", hvnUrl); err != nil {
+	if err := d.Set("hvn_link", hvnURL); err != nil {
 		return nil, err
 	}
 

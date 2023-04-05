@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package provider
 
 import (
@@ -6,7 +9,7 @@ import (
 	"fmt"
 	"time"
 
-	consulmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-consul-service/preview/2021-02-04/models"
+	consulmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-consul-service/stable/2021-02-04/models"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 
@@ -66,7 +69,7 @@ func dataSourceConsulVersionsRead(ctx context.Context, d *schema.ResourceData, m
 	previewVersions := make([]string, 0)
 
 	for _, v := range availableConsulVersions {
-		switch v.Status {
+		switch *v.Status {
 		case consulmodels.HashicorpCloudConsul20210204VersionStatusRECOMMENDED:
 			recommendedVersion = v.Version
 			availableVersions = append(availableVersions, v.Version)

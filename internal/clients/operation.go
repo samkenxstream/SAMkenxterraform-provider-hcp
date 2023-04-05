@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package clients
 
 import (
@@ -6,7 +9,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/hashicorp/hcp-sdk-go/clients/cloud-operation/preview/2020-05-05/client/operation_service"
+	"github.com/hashicorp/hcp-sdk-go/clients/cloud-operation/stable/2020-05-05/client/operation_service"
 	sharedmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-shared/v1/models"
 )
 
@@ -55,8 +58,8 @@ func WaitForOperation(ctx context.Context, client *Client, operationName string,
 				// Reset consecutive errors after a successful response.
 				consecutiveErrors = 0
 
-				log.Printf("[INFO] Received state of %s operation (%s): %s", operationName, operationID, waitResponse.Payload.Operation.State)
-				if waitResponse.Payload.Operation.State == sharedmodels.HashicorpCloudOperationOperationStateDONE {
+				log.Printf("[INFO] Received state of %s operation (%s): %s", operationName, operationID, *waitResponse.Payload.Operation.State)
+				if *waitResponse.Payload.Operation.State == sharedmodels.HashicorpCloudOperationOperationStateDONE {
 					if waitResponse.Payload.Operation.Error != nil {
 						err := fmt.Errorf("%s operation (%s) failed [code=%d, message=%s]",
 							operationName, waitResponse.Payload.Operation.ID, waitResponse.Payload.Operation.Error.Code, waitResponse.Payload.Operation.Error.Message)

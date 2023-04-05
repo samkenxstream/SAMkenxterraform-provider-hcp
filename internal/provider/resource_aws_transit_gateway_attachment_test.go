@@ -1,10 +1,13 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package provider
 
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
@@ -14,14 +17,15 @@ import (
 
 var (
 	// using unique names for AWS resource to make debugging easier
-	tgwAttUniqueAWSName        = fmt.Sprintf("hcp-tf-provider-test-%d", rand.Intn(99999))
+	tgwAttUniqueAWSName        = fmt.Sprintf("hcp-att-unique-test-%s", time.Now().Format("200601021504"))
+	tgwAttUniqueHvnName        = fmt.Sprintf("att-hvn-name-%s", time.Now().Format("200601021504"))
 	testAccTGWAttachmentConfig = fmt.Sprintf(`
 provider "aws" {
   region = "us-west-2"
 }
 
 resource "hcp_hvn" "test" {
-  hvn_id         = "test-hvn"
+  hvn_id         = "%[2]s"
   cloud_provider = "aws"
   region         = "us-west-2"
   cidr_block     = "172.25.16.0/20"
@@ -62,7 +66,7 @@ resource "hcp_aws_transit_gateway_attachment" "example" {
   ]
 
   hvn_id                        = hcp_hvn.test.hvn_id
-  transit_gateway_attachment_id = "example-tgw-attachment"
+  transit_gateway_attachment_id = "%[1]s"
   transit_gateway_id            = aws_ec2_transit_gateway.example.id
   resource_share_arn            = aws_ram_resource_share.example.arn
 }
@@ -77,7 +81,7 @@ data "hcp_aws_transit_gateway_attachment" "example" {
 // The route depends on the data source, rather than the resource, to ensure the TGW is in an Active state.
 resource "hcp_hvn_route" "route" {
  hvn_link         = hcp_hvn.test.self_link
- hvn_route_id     = "hvn-to-tgw-attachment"
+ hvn_route_id     = "%[1]s"
  destination_cidr = aws_vpc.example.cidr_block
  target_link      = data.hcp_aws_transit_gateway_attachment.example.self_link
 }
@@ -99,7 +103,7 @@ resource "aws_ec2_transit_gateway_vpc_attachment_accepter" "example" {
 	 tgw_attachment_id = hcp_aws_transit_gateway_attachment.example.transit_gateway_attachment_id
   }
 }
-`, tgwAttUniqueAWSName)
+`, tgwAttUniqueAWSName, tgwAttUniqueHvnName)
 )
 
 func TestAccTGWAttachment(t *testing.T) {
@@ -109,7 +113,7 @@ func TestAccTGWAttachment(t *testing.T) {
 		PreCheck:          func() { testAccPreCheck(t, map[string]bool{"aws": true, "azure": false}) },
 		ProviderFactories: providerFactories,
 		ExternalProviders: map[string]resource.ExternalProvider{
-			"aws": {VersionConstraint: "~> 2.64.0"},
+			"aws": {VersionConstraint: "~> 4.0.0"},
 		},
 		CheckDestroy: testAccCheckTGWAttachmentDestroy,
 
@@ -119,8 +123,8 @@ func TestAccTGWAttachment(t *testing.T) {
 				Config: testConfig(testAccTGWAttachmentConfig),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckTGWAttachmentExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "transit_gateway_attachment_id", "example-tgw-attachment"),
-					resource.TestCheckResourceAttr(resourceName, "hvn_id", "test-hvn"),
+					resource.TestCheckResourceAttr(resourceName, "transit_gateway_attachment_id", tgwAttUniqueAWSName),
+					resource.TestCheckResourceAttr(resourceName, "hvn_id", tgwAttUniqueHvnName),
 					resource.TestCheckResourceAttrSet(resourceName, "transit_gateway_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "provider_transit_gateway_attachment_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "state"),
@@ -128,7 +132,7 @@ func TestAccTGWAttachment(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "project_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "created_at"),
 					resource.TestCheckResourceAttrSet(resourceName, "expires_at"),
-					testLink(resourceName, "self_link", "example-tgw-attachment", TgwAttachmentResourceType, "hcp_hvn.test"),
+					testLink(resourceName, "self_link", tgwAttUniqueAWSName, TgwAttachmentResourceType, "hcp_hvn.test"),
 				),
 			},
 			// Testing that we can import TGW attachment created in the previous step and that the
@@ -142,7 +146,7 @@ func TestAccTGWAttachment(t *testing.T) {
 						return "", fmt.Errorf("not found: aws_ram_resource_share.example")
 					}
 
-					return fmt.Sprintf("test-hvn:example-tgw-attachment:%s", resourceShare.Primary.Attributes["arn"]), nil
+					return fmt.Sprintf("%s:%s:%s", tgwAttUniqueHvnName, tgwAttUniqueAWSName, resourceShare.Primary.Attributes["arn"]), nil
 				},
 				ImportStateVerify: true,
 			},
@@ -151,8 +155,8 @@ func TestAccTGWAttachment(t *testing.T) {
 				Config: testConfig(testAccTGWAttachmentConfig),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckTGWAttachmentExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "transit_gateway_attachment_id", "example-tgw-attachment"),
-					resource.TestCheckResourceAttr(resourceName, "hvn_id", "test-hvn"),
+					resource.TestCheckResourceAttr(resourceName, "transit_gateway_attachment_id", tgwAttUniqueAWSName),
+					resource.TestCheckResourceAttr(resourceName, "hvn_id", tgwAttUniqueHvnName),
 					resource.TestCheckResourceAttrSet(resourceName, "transit_gateway_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "provider_transit_gateway_attachment_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "state"),
@@ -160,7 +164,7 @@ func TestAccTGWAttachment(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "project_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "created_at"),
 					resource.TestCheckResourceAttrSet(resourceName, "expires_at"),
-					testLink(resourceName, "self_link", "example-tgw-attachment", TgwAttachmentResourceType, "hcp_hvn.test"),
+					testLink(resourceName, "self_link", tgwAttUniqueAWSName, TgwAttachmentResourceType, "hcp_hvn.test"),
 				),
 			},
 		},

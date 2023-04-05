@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package clients
 
 import (
@@ -5,8 +8,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hashicorp/hcp-sdk-go/clients/cloud-network/preview/2020-09-07/client/network_service"
-	networkmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-network/preview/2020-09-07/models"
+	"github.com/hashicorp/hcp-sdk-go/clients/cloud-network/stable/2020-09-07/client/network_service"
+	networkmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-network/stable/2020-09-07/models"
 	sharedmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-shared/v1/models"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 )
@@ -58,11 +61,7 @@ func tgwAttachmentRefreshState(ctx context.Context, client *Client, tgwAttachmen
 // until the state is ACTIVE, ctx is canceled, or an error occurs.
 func WaitForTGWAttachmentToBeActive(ctx context.Context, client *Client, tgwAttachmentID string, hvnID string, loc *sharedmodels.HashicorpCloudLocationLocation, timeout time.Duration) (*networkmodels.HashicorpCloudNetwork20200907TGWAttachment, error) {
 	stateChangeConf := resource.StateChangeConf{
-		Pending: []string{
-			TgwAttachmentStateCreating,
-			TgwAttachmentStatePendingAcceptance,
-			TgwAttachmentStateAccepted,
-		},
+		Pending: WaitForTGWAttachmentToBeActiveStates,
 		Target: []string{
 			TgwAttachmentStateActive,
 		},
@@ -73,10 +72,21 @@ func WaitForTGWAttachmentToBeActive(ctx context.Context, client *Client, tgwAtta
 
 	result, err := stateChangeConf.WaitForStateContext(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("Error waiting for transit gateway attachment (%s) to become 'ACTIVE': %s", tgwAttachmentID, err)
+		err = fmt.Errorf("error waiting for transit gateway attachment (%s) to become 'ACTIVE': %s", tgwAttachmentID, err)
+		if result != nil {
+			return result.(*networkmodels.HashicorpCloudNetwork20200907TGWAttachment), err
+		}
+		return nil, err
 	}
 
 	return result.(*networkmodels.HashicorpCloudNetwork20200907TGWAttachment), nil
+}
+
+// WaitForTGWAttachmentToBeActiveStates is the set of states of the attachment which we'll wait on.
+var WaitForTGWAttachmentToBeActiveStates = []string{
+	TgwAttachmentStateCreating,
+	TgwAttachmentStatePendingAcceptance,
+	TgwAttachmentStateAccepted,
 }
 
 // WaitForTGWAttachmentToBePendingAcceptance will poll the GET TGW attachment
@@ -97,7 +107,7 @@ func WaitForTGWAttachmentToBePendingAcceptance(ctx context.Context, client *Clie
 
 	result, err := stateChangeConf.WaitForStateContext(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("Error waiting for transit gateway attachment (%s) to become 'PENDING_ACCEPTANCE': %s", tgwAttachmentID, err)
+		return nil, fmt.Errorf("error waiting for transit gateway attachment (%s) to become 'PENDING_ACCEPTANCE': %s", tgwAttachmentID, err)
 	}
 
 	return result.(*networkmodels.HashicorpCloudNetwork20200907TGWAttachment), nil

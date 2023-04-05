@@ -1,8 +1,10 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package provider
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -81,25 +83,29 @@ func testAccPreCheck(t *testing.T, requiredCreds map[string]bool) {
 		}
 
 		if requiredCreds["azure"] {
-			if os.Getenv("AZURE_TENANT_ID") == "" {
-				t.Fatal("AZURE_TENANT_ID must be set for acceptance tests")
+			if os.Getenv("ARM_TENANT_ID") == "" {
+				t.Fatal("ARM_TENANT_ID must be set for acceptance tests")
 			}
 
-			if os.Getenv("AZURE_SUBSCRIPTION_ID") == "" {
-				t.Fatal("AZURE_SUBSCRIPTION_ID must be set for acceptance tests")
+			if os.Getenv("ARM_SUBSCRIPTION_ID") == "" {
+				t.Fatal("ARM_SUBSCRIPTION_ID must be set for acceptance tests")
 			}
 		}
 
 		err := testAccProvider.Configure(context.Background(), terraform.NewResourceConfigRaw(nil))
 		if err != nil {
-			t.Fatal(err)
+			if err[0].Severity == 1 {
+				// Severity 1 = Warning, which can be ignored during test
+				return
+			}
+
+			t.Fatalf("unexpected error, exiting test: %#v", err)
 		}
 	})
 }
 
 func testConfig(res ...string) string {
-	provider := fmt.Sprintf(`
-provider "hcp" {}`)
+	provider := `provider "hcp" {}`
 
 	c := []string{provider}
 	c = append(c, res...)

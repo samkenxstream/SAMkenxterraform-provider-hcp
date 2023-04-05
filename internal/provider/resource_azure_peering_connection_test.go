@@ -1,11 +1,14 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package provider
 
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
@@ -13,9 +16,9 @@ import (
 )
 
 var (
-	uniqueAzurePeeringTestID  = fmt.Sprintf("hcp-tf-provider-test-%d", rand.Intn(99999))
-	subscriptionID            = os.Getenv("AZURE_SUBSCRIPTION_ID")
-	tenantID                  = os.Getenv("AZURE_TENANT_ID")
+	uniqueAzurePeeringTestID  = fmt.Sprintf("hcp-provider-test-%s", time.Now().Format("200601021504"))
+	subscriptionID            = os.Getenv("ARM_SUBSCRIPTION_ID")
+	tenantID                  = os.Getenv("ARM_TENANT_ID")
 	testAccAzurePeeringConfig = fmt.Sprintf(`
 provider "azurerm" {
   features {}
@@ -122,20 +125,29 @@ func TestAccAzurePeeringConnection(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "peer_tenant_id", tenantID),
 					resource.TestCheckResourceAttr(resourceName, "peer_vnet_name", uniqueAzurePeeringTestID),
 					resource.TestCheckResourceAttrSet(resourceName, "peer_vnet_region"),
-					resource.TestCheckResourceAttrSet(resourceName, "azure_peering_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "organization_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "project_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "created_at"),
 					resource.TestCheckResourceAttrSet(resourceName, "expires_at"),
 					resource.TestCheckResourceAttrSet(resourceName, "state"),
 					testLink(resourceName, "self_link", uniqueAzurePeeringTestID, PeeringResourceType, "hcp_hvn.test"),
+					// Note: azure_peering_id is not set until the peering is accepted after creation.
 				),
 			},
 			// Tests import
 			{
-				ResourceName:      resourceName,
-				ImportState:       true,
-				ImportStateId:     uniqueAzurePeeringTestID + ":" + uniqueAzurePeeringTestID,
+				ResourceName: resourceName,
+				ImportState:  true,
+				ImportStateIdFunc: func(s *terraform.State) (string, error) {
+					rs, ok := s.RootModule().Resources[resourceName]
+					if !ok {
+						return "", fmt.Errorf("not found: %s", resourceName)
+					}
+
+					hvnID := s.RootModule().Resources["hcp_hvn.test"].Primary.Attributes["hvn_id"]
+					peerID := rs.Primary.Attributes["peering_id"]
+					return fmt.Sprintf("%s:%s", hvnID, peerID), nil
+				},
 				ImportStateVerify: true,
 			},
 			// Tests read

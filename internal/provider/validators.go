@@ -1,14 +1,18 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package provider
 
 import (
 	"fmt"
 	"net"
+	"net/netip"
 	"regexp"
 	"strings"
 
 	"github.com/go-openapi/strfmt"
 	"github.com/hashicorp/go-cty/cty"
-	consulmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-consul-service/preview/2021-02-04/models"
+	consulmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-consul-service/stable/2021-02-04/models"
 	vaultmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-vault-service/stable/2020-11-25/models"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
@@ -42,7 +46,7 @@ func validateStringInSlice(valid []string, ignoreCase bool) schema.SchemaValidat
 		value := v.(string)
 
 		for _, validString := range valid {
-			if v == validString || (ignoreCase && strings.ToLower(value) == strings.ToLower(validString)) {
+			if v == validString || (ignoreCase && strings.EqualFold(value, validString)) {
 				return diagnostics
 			}
 		}
@@ -178,10 +182,103 @@ func validateConsulClusterSize(v interface{}, path cty.Path) diag.Diagnostics {
 	return diagnostics
 }
 
+func validateConsulClusterCIDR(v interface{}, path cty.Path) diag.Diagnostics {
+	var diagnostics diag.Diagnostics
+
+	addr := v.(string)
+	ip, err := netip.ParsePrefix(addr)
+	isIPV4 := ip.Addr().Is4()
+
+	if err != nil || !ip.IsValid() || !isIPV4 {
+		msg := fmt.Sprintf("invalid address (%v) of ip_allowlist", v)
+		diagnostics = append(diagnostics, diag.Diagnostic{
+			Severity:      diag.Error,
+			Summary:       msg,
+			Detail:        msg + " (must be a valid IPV4 CIDR).",
+			AttributePath: path,
+		})
+	}
+
+	return diagnostics
+}
+
+func validateConsulClusterCIDRDescription(v interface{}, path cty.Path) diag.Diagnostics {
+	var diagnostics diag.Diagnostics
+	description := v.(string)
+	if len(description) > 255 {
+		msg := fmt.Sprintf("invalid description (%v) of ip_allowlist", v)
+		diagnostics = append(diagnostics, diag.Diagnostic{
+			Severity:      diag.Error,
+			Summary:       msg,
+			Detail:        msg + " (must be within 255 char).",
+			AttributePath: path,
+		})
+	}
+
+	return diagnostics
+}
+
 func validateVaultClusterTier(v interface{}, path cty.Path) diag.Diagnostics {
 	var diagnostics diag.Diagnostics
 
 	err := vaultmodels.HashicorpCloudVault20201125Tier(strings.ToUpper(v.(string))).Validate(strfmt.Default)
+	if err != nil {
+		enumList := regexp.MustCompile(`\[.*\]`).FindString(err.Error())
+		expectedEnumList := strings.ToLower(enumList)
+		msg := fmt.Sprintf("expected '%v' to be one of: %v", v, expectedEnumList)
+		diagnostics = append(diagnostics, diag.Diagnostic{
+			Severity:      diag.Error,
+			Summary:       msg,
+			Detail:        msg + " (value is case-insensitive).",
+			AttributePath: path,
+		})
+	}
+
+	return diagnostics
+}
+
+func validateVaultUpgradeType(v interface{}, path cty.Path) diag.Diagnostics {
+	var diagnostics diag.Diagnostics
+
+	err := vaultmodels.HashicorpCloudVault20201125MajorVersionUpgradeConfigUpgradeType(strings.ToUpper(v.(string))).Validate(strfmt.Default)
+	if err != nil {
+		enumList := regexp.MustCompile(`\[.*\]`).FindString(err.Error())
+		expectedEnumList := strings.ToLower(enumList)
+		msg := fmt.Sprintf("expected '%v' to be one of: %v", v, expectedEnumList)
+		diagnostics = append(diagnostics, diag.Diagnostic{
+			Severity:      diag.Error,
+			Summary:       msg,
+			Detail:        msg + " (value is case-insensitive).",
+			AttributePath: path,
+		})
+	}
+
+	return diagnostics
+}
+
+func validateVaultUpgradeWindowDay(v interface{}, path cty.Path) diag.Diagnostics {
+	var diagnostics diag.Diagnostics
+
+	err := vaultmodels.HashicorpCloudVault20201125MajorVersionUpgradeConfigMaintenanceWindowDayOfWeek(strings.ToUpper(v.(string))).Validate(strfmt.Default)
+	if err != nil {
+		enumList := regexp.MustCompile(`\[.*\]`).FindString(err.Error())
+		expectedEnumList := strings.ToLower(enumList)
+		msg := fmt.Sprintf("expected '%v' to be one of: %v", v, expectedEnumList)
+		diagnostics = append(diagnostics, diag.Diagnostic{
+			Severity:      diag.Error,
+			Summary:       msg,
+			Detail:        msg + " (value is case-insensitive).",
+			AttributePath: path,
+		})
+	}
+
+	return diagnostics
+}
+
+func validateVaultUpgradeWindowTime(v interface{}, path cty.Path) diag.Diagnostics {
+	var diagnostics diag.Diagnostics
+
+	err := vaultmodels.HashicorpCloudVault20201125MajorVersionUpgradeConfigMaintenanceWindowTimeWindowUTC(strings.ToUpper(v.(string))).Validate(strfmt.Default)
 	if err != nil {
 		enumList := regexp.MustCompile(`\[.*\]`).FindString(err.Error())
 		expectedEnumList := strings.ToLower(enumList)
@@ -279,6 +376,40 @@ func validateCIDRBlock(v interface{}, path cty.Path) diag.Diagnostics {
 	// range to avoid causing confusion with a misguiding error message.
 	if !ip.Equal(net.IP) {
 		msg := fmt.Sprintf("invalid CIDR range start %s, should have been %s", ip, net.IP)
+		diagnostics = append(diagnostics, diag.Diagnostic{
+			Severity:      diag.Error,
+			Summary:       msg,
+			Detail:        msg,
+			AttributePath: path,
+		})
+	}
+
+	return diagnostics
+}
+
+// Validate the provided initial admin username for a boundary cluster
+func validateBoundaryUsername(v interface{}, path cty.Path) diag.Diagnostics {
+	var diagnostics diag.Diagnostics
+
+	if !regexp.MustCompile("^[a-z0-9.-]{3,}$").MatchString(v.(string)) {
+		msg := "invalid boundary username; login name must be all-lowercase alphanumeric, period or hyphen, and at least 3 characters."
+		diagnostics = append(diagnostics, diag.Diagnostic{
+			Severity:      diag.Error,
+			Summary:       msg,
+			Detail:        msg,
+			AttributePath: path,
+		})
+	}
+
+	return diagnostics
+}
+
+// Validate the password for the initial boundary cluster admin user
+func validateBoundaryPassword(v interface{}, path cty.Path) diag.Diagnostics {
+	var diagnostics diag.Diagnostics
+
+	if len(v.(string)) < 8 {
+		msg := "invalid boundary password; password must be at least 8 characters."
 		diagnostics = append(diagnostics, diag.Diagnostic{
 			Severity:      diag.Error,
 			Summary:       msg,

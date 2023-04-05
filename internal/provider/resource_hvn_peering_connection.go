@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package provider
 
 import (
@@ -5,8 +8,8 @@ import (
 	"log"
 	"strings"
 
-	"github.com/hashicorp/hcp-sdk-go/clients/cloud-network/preview/2020-09-07/client/network_service"
-	networkmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-network/preview/2020-09-07/models"
+	"github.com/hashicorp/hcp-sdk-go/clients/cloud-network/stable/2020-09-07/client/network_service"
+	networkmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-network/stable/2020-09-07/models"
 	sharedmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-shared/v1/models"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
@@ -273,13 +276,13 @@ func resourceHvnPeeringConnectionImport(ctx context.Context, d *schema.ResourceD
 
 	// Only hvn_1 is required to fetch the peering connection. hvn_2 will be populated during the refresh phase immediately after import.
 	hvnLink := newLink(loc, HvnResourceType, hvnID)
-	hvnUrl, err := linkURL(hvnLink)
+	hvnURL, err := linkURL(hvnLink)
 	if err != nil {
 		return nil, err
 	}
 
 	d.SetId(url)
-	if err := d.Set("hvn_1", hvnUrl); err != nil {
+	if err := d.Set("hvn_1", hvnURL); err != nil {
 		return nil, err
 	}
 

@@ -1,9 +1,10 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package main
 
 import (
-	"context"
 	"flag"
-	"log"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/plugin"
 	"github.com/hashicorp/terraform-provider-hcp/internal/provider"
@@ -25,16 +26,17 @@ func main() {
 	flag.BoolVar(&debugMode, "debug", false, "set to true to run the provider with support for debuggers like delve")
 	flag.Parse()
 
-	opts := &plugin.ServeOpts{ProviderFunc: provider.New()}
-
 	if debugMode {
-		// TODO: update this string with the full name of your provider as used in your configs
-		err := plugin.Debug(context.Background(), "registry.terraform.io/hashicorp/hcp", opts)
-		if err != nil {
-			log.Fatal(err.Error())
-		}
+		plugin.Serve(&plugin.ServeOpts{
+			Debug:        true,
+			ProviderFunc: provider.New(),
+			ProviderAddr: "registry.terraform.io/hashicorp/hcp",
+		})
+
 		return
 	}
 
-	plugin.Serve(opts)
+	plugin.Serve(&plugin.ServeOpts{
+		ProviderFunc: provider.New(),
+	})
 }

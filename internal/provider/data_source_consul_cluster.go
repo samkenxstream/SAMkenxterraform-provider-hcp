@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package provider
 
 import (
@@ -5,7 +8,7 @@ import (
 	"fmt"
 	"log"
 
-	consulmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-consul-service/preview/2021-02-04/models"
+	consulmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-consul-service/stable/2021-02-04/models"
 	sharedmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-shared/v1/models"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
@@ -144,6 +147,25 @@ func dataSourceConsulCluster() *schema.Resource {
 				Type:        schema.TypeBool,
 				Computed:    true,
 			},
+			"ip_allowlist": {
+				Description: "Allowed IPV4 address ranges (CIDRs) for inbound traffic. Each entry must be a unique CIDR. Maximum 3 CIDRS supported at this time.",
+				Type:        schema.TypeList,
+				Computed:    true,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"address": {
+							Description: "IP address range in CIDR notation.",
+							Type:        schema.TypeString,
+							Computed:    true,
+						},
+						"description": {
+							Description: "Description to help identify source (maximum 255 chars).",
+							Type:        schema.TypeString,
+							Computed:    true,
+						},
+					},
+				},
+			},
 		},
 	}
 }
@@ -281,21 +303,35 @@ func setConsulClusterDataSourceAttributes(
 	}
 
 	link := newLink(cluster.Location, ConsulClusterResourceType, cluster.ID)
-	self_link, err := linkURL(link)
+	selfLink, err := linkURL(link)
 	if err != nil {
 		return err
 	}
-	if err := d.Set("self_link", self_link); err != nil {
+	if err := d.Set("self_link", selfLink); err != nil {
 		return err
 	}
 
 	if cluster.Config.ConsulConfig.Primary != nil {
 		link := newLink(cluster.Config.ConsulConfig.Primary.Location, ConsulClusterResourceType, cluster.Config.ConsulConfig.Primary.ID)
-		primary_link, err := linkURL(link)
+		primaryLink, err := linkURL(link)
 		if err != nil {
 			return err
 		}
-		if err := d.Set("primary_link", primary_link); err != nil {
+		if err := d.Set("primary_link", primaryLink); err != nil {
+			return err
+		}
+	}
+
+	if cluster.Config.NetworkConfig != nil {
+		ipAllowlist := make([]map[string]interface{}, len(cluster.Config.NetworkConfig.IPAllowlist))
+		for i, cidrRange := range cluster.Config.NetworkConfig.IPAllowlist {
+			cidr := map[string]interface{}{
+				"description": cidrRange.Description,
+				"address":     cidrRange.Address,
+			}
+			ipAllowlist[i] = cidr
+		}
+		if err := d.Set("ip_allowlist", ipAllowlist); err != nil {
 			return err
 		}
 	}

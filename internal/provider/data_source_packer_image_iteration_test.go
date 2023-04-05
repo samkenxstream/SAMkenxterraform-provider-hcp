@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package provider
 
 import (
@@ -9,7 +12,7 @@ import (
 	"github.com/cenkalti/backoff"
 	"github.com/go-openapi/strfmt"
 	"github.com/google/uuid"
-	"github.com/hashicorp/hcp-sdk-go/clients/cloud-operation/preview/2020-05-05/client/operation_service"
+	"github.com/hashicorp/hcp-sdk-go/clients/cloud-operation/stable/2020-05-05/client/operation_service"
 	"github.com/hashicorp/hcp-sdk-go/clients/cloud-packer-service/stable/2021-04-30/client/packer_service"
 	"github.com/hashicorp/hcp-sdk-go/clients/cloud-packer-service/stable/2021-04-30/models"
 	sharedmodels "github.com/hashicorp/hcp-sdk-go/clients/cloud-shared/v1/models"
@@ -19,10 +22,10 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
-const (
-	acctestAlpineBucket      = "alpine-acctest"
-	acctestUbuntuBucket      = "ubuntu-acctest"
-	acctestProductionChannel = "production"
+var (
+	acctestAlpineBucket      = fmt.Sprintf("alpine-acc-%s", time.Now().Format("200601021504"))
+	acctestUbuntuBucket      = fmt.Sprintf("ubuntu-acc-%s", time.Now().Format("200601021504"))
+	acctestProductionChannel = fmt.Sprintf("packer-acc-channel-%s", time.Now().Format("200601021504"))
 )
 
 var (
@@ -50,8 +53,9 @@ func upsertRegistry(t *testing.T) {
 	params := packer_service.NewPackerServiceCreateRegistryParams()
 	params.LocationOrganizationID = loc.OrganizationID
 	params.LocationProjectID = loc.ProjectID
-	params.Body = &models.HashicorpCloudPackerCreateRegistryRequest{
-		FeatureTier: models.HashicorpCloudPackerRegistryConfigTierPLUS,
+	featureTier := models.HashicorpCloudPackerRegistryConfigTierPLUS
+	params.Body = packer_service.PackerServiceCreateRegistryBody{
+		FeatureTier: &featureTier,
 	}
 
 	resp, err := client.Packer.PackerServiceCreateRegistry(params, nil)
@@ -66,13 +70,14 @@ func upsertRegistry(t *testing.T) {
 				t.Errorf("unexpected GetRegistry error: %v", err)
 				return
 			}
-			if getResp.Payload.Registry.Config.FeatureTier != models.HashicorpCloudPackerRegistryConfigTierPLUS {
+			if *getResp.Payload.Registry.Config.FeatureTier != models.HashicorpCloudPackerRegistryConfigTierPLUS {
 				// Make sure is a plus registry
 				params := packer_service.NewPackerServiceUpdateRegistryParams()
 				params.LocationOrganizationID = loc.OrganizationID
 				params.LocationProjectID = loc.ProjectID
-				params.Body = &models.HashicorpCloudPackerUpdateRegistryRequest{
-					FeatureTier: models.HashicorpCloudPackerRegistryConfigTierPLUS,
+				featureTier := models.HashicorpCloudPackerRegistryConfigTierPLUS
+				params.Body = packer_service.PackerServiceUpdateRegistryBody{
+					FeatureTier: &featureTier,
 				}
 				resp, err := client.Packer.PackerServiceUpdateRegistry(params, nil)
 				if err != nil {
@@ -89,7 +94,6 @@ func upsertRegistry(t *testing.T) {
 	}
 
 	waitForOperation(t, loc, "Create Registry", resp.Payload.Operation.ID, client)
-	return
 }
 
 func waitForOperation(
@@ -116,16 +120,16 @@ func waitForOperation(
 			t.Errorf("Operation failed: %s", resp.Payload.Operation.Error.Message)
 		}
 
-		switch resp.Payload.Operation.State {
-		case "PENDING":
+		switch *resp.Payload.Operation.State {
+		case sharedmodels.HashicorpCloudOperationOperationStatePENDING:
 			msg := fmt.Sprintf("==> Operation \"%s\" pending...", operationName)
 			return fmt.Errorf(msg)
-		case "RUNNING":
+		case sharedmodels.HashicorpCloudOperationOperationStateRUNNING:
 			msg := fmt.Sprintf("==> Operation \"%s\" running...", operationName)
 			return fmt.Errorf(msg)
-		case "DONE":
+		case sharedmodels.HashicorpCloudOperationOperationStateDONE:
 		default:
-			t.Errorf("Operation returned unknown state: %s", resp.Payload.Operation.State)
+			t.Errorf("Operation returned unknown state: %s", *resp.Payload.Operation.State)
 		}
 		return nil
 	}
@@ -154,9 +158,8 @@ func upsertBucket(t *testing.T, bucketSlug string) {
 	createBktParams := packer_service.NewPackerServiceCreateBucketParams()
 	createBktParams.LocationOrganizationID = loc.OrganizationID
 	createBktParams.LocationProjectID = loc.ProjectID
-	createBktParams.Body = &models.HashicorpCloudPackerCreateBucketRequest{
+	createBktParams.Body = packer_service.PackerServiceCreateBucketBody{
 		BucketSlug: bucketSlug,
-		Location:   loc,
 	}
 	_, err := client.Packer.PackerServiceCreateBucket(createBktParams, nil)
 	if err == nil {
@@ -187,8 +190,7 @@ func upsertIteration(t *testing.T, bucketSlug, fingerprint string) {
 	createItParams.LocationProjectID = loc.ProjectID
 	createItParams.BucketSlug = bucketSlug
 
-	createItParams.Body = &models.HashicorpCloudPackerCreateIterationRequest{
-		BucketSlug:  bucketSlug,
+	createItParams.Body = packer_service.PackerServiceCreateIterationBody{
 		Fingerprint: fingerprint,
 	}
 	_, err := client.Packer.PackerServiceCreateIteration(createItParams, nil)
@@ -218,7 +220,7 @@ func revokeIteration(t *testing.T, iterationID, bucketSlug string, revokeAt strf
 	params.LocationOrganizationID = loc.OrganizationID
 	params.LocationProjectID = loc.ProjectID
 	params.IterationID = iterationID
-	params.Body = &models.HashicorpCloudPackerUpdateIterationRequest{
+	params.Body = packer_service.PackerServiceUpdateIterationBody{
 		BucketSlug: bucketSlug,
 		RevokeAt:   revokeAt,
 	}
@@ -264,17 +266,15 @@ func upsertBuild(t *testing.T, bucketSlug, fingerprint, iterationID string) {
 	createBuildParams.BucketSlug = bucketSlug
 	createBuildParams.IterationID = iterationID
 
-	createBuildParams.Body = &models.HashicorpCloudPackerCreateBuildRequest{
-		BucketSlug: bucketSlug,
+	status := models.HashicorpCloudPackerBuildStatusRUNNING
+	createBuildParams.Body = packer_service.PackerServiceCreateBuildBody{
 		Build: &models.HashicorpCloudPackerBuildCreateBody{
 			CloudProvider: "aws",
 			ComponentType: "amazon-ebs.example",
 			PackerRunUUID: uuid.New().String(),
-			Status:        models.HashicorpCloudPackerBuildStatusRUNNING,
+			Status:        &status,
 		},
 		Fingerprint: fingerprint,
-		IterationID: iterationID,
-		Location:    loc,
 	}
 
 	build, err := client.Packer.PackerServiceCreateBuild(createBuildParams, nil)
@@ -297,9 +297,10 @@ func upsertBuild(t *testing.T, bucketSlug, fingerprint, iterationID string) {
 	updateBuildParams.LocationOrganizationID = loc.OrganizationID
 	updateBuildParams.LocationProjectID = loc.ProjectID
 	updateBuildParams.BuildID = build.Payload.Build.ID
-	updateBuildParams.Body = &models.HashicorpCloudPackerUpdateBuildRequest{
+	updatesStatus := models.HashicorpCloudPackerBuildStatusDONE
+	updateBuildParams.Body = packer_service.PackerServiceUpdateBuildBody{
 		Updates: &models.HashicorpCloudPackerBuildUpdates{
-			Status: models.HashicorpCloudPackerBuildStatusDONE,
+			Status: &updatesStatus,
 			Images: []*models.HashicorpCloudPackerImageCreateBody{
 				{
 					ImageID: "ami-42",
@@ -307,7 +308,7 @@ func upsertBuild(t *testing.T, bucketSlug, fingerprint, iterationID string) {
 				},
 				{
 					ImageID: "ami-43",
-					Region:  "us-east-1",
+					Region:  "us-east-2",
 				},
 			},
 			Labels: map[string]string{"test-key": "test-value"},
@@ -332,7 +333,7 @@ func createChannel(t *testing.T, bucketSlug, channelSlug, iterationID string) {
 	createChParams.LocationOrganizationID = loc.OrganizationID
 	createChParams.LocationProjectID = loc.ProjectID
 	createChParams.BucketSlug = bucketSlug
-	createChParams.Body = &models.HashicorpCloudPackerCreateChannelRequest{
+	createChParams.Body = packer_service.PackerServiceCreateChannelBody{
 		Slug:        channelSlug,
 		IterationID: iterationID,
 	}
@@ -366,7 +367,7 @@ func updateChannel(t *testing.T, bucketSlug, channelSlug, iterationID string) {
 	updateChParams.LocationProjectID = loc.ProjectID
 	updateChParams.BucketSlug = bucketSlug
 	updateChParams.Slug = channelSlug
-	updateChParams.Body = &models.HashicorpCloudPackerUpdateChannelRequest{
+	updateChParams.Body = packer_service.PackerServiceUpdateChannelBody{
 		IterationID: iterationID,
 	}
 

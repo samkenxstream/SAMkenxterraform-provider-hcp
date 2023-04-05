@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package provider
 
 import (
@@ -127,7 +130,7 @@ func dataSourcePackerImageRead(ctx context.Context, d *schema.ResourceData, meta
 	var err error
 
 	if iterationID != "" {
-		iteration, err = clients.GetIterationFromId(
+		iteration, err = clients.GetIterationFromID(
 			ctx,
 			client,
 			loc,
